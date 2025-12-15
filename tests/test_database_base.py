@@ -152,6 +152,172 @@ class BaseDatabaseTests(ABC):
         assert "David" in result.stdout
 
 
+    def test_cancellable_query_select(self, request):
+        """Test CancellableQuery execution (used by TUI).
+
+        This tests the async query path that the TUI uses, which is different
+        from the CLI path tested by other tests.
+        """
+        from sqlit.config import load_connections
+        from sqlit.db.adapters import get_adapter
+        from sqlit.services.cancellable import CancellableQuery
+        from sqlit.services.query import QueryResult
+
+        # Get the connection fixture name and load the config
+        connection_name = request.getfixturevalue(self.config.connection_fixture)
+        connections = load_connections()
+        config = next((c for c in connections if c.name == connection_name), None)
+        assert config is not None, f"Connection {connection_name} not found"
+
+        adapter = get_adapter(self.config.db_type)
+
+        # Test SELECT query through CancellableQuery
+        query = CancellableQuery(
+            sql="SELECT * FROM test_users ORDER BY id",
+            config=config,
+            adapter=adapter,
+        )
+        result = query.execute(max_rows=100)
+
+        assert isinstance(result, QueryResult)
+        assert len(result.columns) >= 2  # At least id and name
+        assert len(result.rows) == 3
+        # Check that Alice is in the first row
+        row_values = [str(v) for v in result.rows[0]]
+        assert "Alice" in row_values
+
+    def test_cancellable_query_insert(self, request):
+        """Test CancellableQuery non-SELECT execution (used by TUI)."""
+        from sqlit.config import load_connections
+        from sqlit.db.adapters import get_adapter
+        from sqlit.services.cancellable import CancellableQuery
+        from sqlit.services.query import NonQueryResult
+
+        connection_name = request.getfixturevalue(self.config.connection_fixture)
+        connections = load_connections()
+        config = next((c for c in connections if c.name == connection_name), None)
+        assert config is not None
+
+        adapter = get_adapter(self.config.db_type)
+
+        # Test INSERT through CancellableQuery
+        query = CancellableQuery(
+            sql="INSERT INTO test_users (id, name, email) VALUES (99, 'CancellableTest', 'cancel@test.com')",
+            config=config,
+            adapter=adapter,
+        )
+        result = query.execute()
+
+        assert isinstance(result, NonQueryResult)
+        # Some DBs return 1, others return -1 (unknown), both are acceptable
+        assert result.rows_affected >= -1
+
+    def test_streaming_csv_output(self, request, cli_runner):
+        """Test CSV output works for all adapters including those without cursor support.
+
+        This tests the streaming path in commands.py which needs special handling
+        for adapters that don't support cursor-based access.
+        """
+        connection = request.getfixturevalue(self.config.connection_fixture)
+        # No --max-rows to trigger the streaming path for cursor-based adapters
+        result = cli_runner(
+            "query",
+            "-c", connection,
+            "-q", "SELECT id, name FROM test_users ORDER BY id",
+            "--format", "csv",
+        )
+        assert result.returncode == 0
+        assert "id,name" in result.stdout
+        assert "Alice" in result.stdout
+
+    def test_streaming_json_output(self, request, cli_runner):
+        """Test JSON output works for all adapters including those without cursor support."""
+        connection = request.getfixturevalue(self.config.connection_fixture)
+        result = cli_runner(
+            "query",
+            "-c", connection,
+            "-q", "SELECT id, name FROM test_users ORDER BY id",
+            "--format", "json",
+        )
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        assert len(data) == 3
+        assert data[0]["name"] == "Alice"
+
+    def test_adapter_interface_compliance(self, request):
+        """Verify adapter implements required interface without relying on cursor.
+
+        This ensures all database operations go through the adapter abstraction
+        rather than directly accessing the connection object.
+        """
+        from sqlit.db.adapters import get_adapter
+
+        adapter = get_adapter(self.config.db_type)
+
+        # Required methods that should work without cursor
+        required_methods = [
+            'connect',
+            'execute_query',
+            'execute_non_query',
+            'get_tables',
+            'get_views',
+            'get_columns',
+            'get_databases',
+            'get_procedures',
+            'quote_identifier',
+            'build_select_query',
+        ]
+
+        for method_name in required_methods:
+            method = getattr(adapter, method_name, None)
+            assert method is not None, f"Adapter missing required method: {method_name}"
+            assert callable(method), f"Adapter method {method_name} is not callable"
+
+        # Required properties
+        required_properties = [
+            'name',
+            'supports_multiple_databases',
+            'supports_stored_procedures',
+        ]
+
+        for prop_name in required_properties:
+            assert hasattr(adapter, prop_name), f"Adapter missing required property: {prop_name}"
+
+    def test_query_service_execution(self, request):
+        """Test QueryService execution path (used by CLI with row limits).
+
+        This tests the standard query execution path through QueryService
+        which should use adapter methods.
+        """
+        from sqlit.config import load_connections
+        from sqlit.db.adapters import get_adapter
+        from sqlit.services.query import QueryResult, QueryService
+        from sqlit.services.session import ConnectionSession
+
+        connection_name = request.getfixturevalue(self.config.connection_fixture)
+        connections = load_connections()
+        config = next((c for c in connections if c.name == connection_name), None)
+        assert config is not None
+
+        service = QueryService()
+
+        # Create a session and execute through QueryService
+        with ConnectionSession.create(config, get_adapter) as session:
+            result = service.execute(
+                connection=session.connection,
+                adapter=session.adapter,
+                query="SELECT * FROM test_users ORDER BY id",
+                config=config,
+                max_rows=100,
+                save_to_history=False,
+            )
+
+            assert isinstance(result, QueryResult)
+            assert len(result.rows) == 3
+            row_values = [str(v) for v in result.rows[0]]
+            assert "Alice" in row_values
+
+
 class BaseDatabaseTestsWithLimit(BaseDatabaseTests):
     """Base tests for databases that support LIMIT syntax."""
 
