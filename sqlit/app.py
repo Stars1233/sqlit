@@ -331,7 +331,7 @@ class SSMSTUI(
             with Horizontal(id="content"):
                 with Vertical(id="sidebar"):
                     yield Static(
-                        r"\[e] Object Explorer", classes="section-label", id="label-explorer"
+                        r"\[E] Explorer", classes="section-label", id="label-explorer"
                     )
                     tree = Tree("Servers", id="object-tree")
                     tree.show_root = False

@@ -39,7 +39,7 @@ class TreeMixin:
         return badge_map.get(db_type, db_type.upper() if db_type else "DB")
 
     def refresh_tree(self) -> None:
-        """Refresh the object explorer tree."""
+        """Refresh the explorer tree."""
         self.object_tree.clear()
         self.object_tree.root.expand()
 
@@ -368,12 +368,12 @@ class TreeMixin:
         self._update_footer_bindings()
 
     def action_refresh_tree(self) -> None:
-        """Refresh the object explorer."""
+        """Refresh the explorer."""
         self.refresh_tree()
         self.notify("Refreshed")
 
     def action_collapse_tree(self) -> None:
-        """Collapse all nodes in the object explorer."""
+        """Collapse all nodes in the explorer."""
         def collapse_all(node):
             for child in node.children:
                 collapse_all(child)

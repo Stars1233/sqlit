@@ -133,7 +133,7 @@ class HelpEntry:
 
     key: str  # Display key (e.g., "enter", "s")
     description: str  # Help description (e.g., "Select TOP 100")
-    category: str  # Category name (e.g., "Object Explorer")
+    category: str  # Category name (e.g., "Explorer")
 
 
 @dataclass
@@ -383,7 +383,7 @@ class MainScreenState(State):
 
     def _setup_actions(self) -> None:
         # Navigation (shown in Navigation category)
-        self.allows("focus_explorer", help="Focus Object Explorer", help_key="e")
+        self.allows("focus_explorer", help="Focus Explorer", help_key="e")
         self.allows("focus_query", help="Focus Query", help_key="q")
         self.allows("focus_results", help="Focus Results", help_key="r")
         self.allows("toggle_fullscreen", help="Toggle fullscreen", help_key="f")
@@ -453,7 +453,7 @@ class LeaderPendingState(State):
 class TreeFocusedState(State):
     """Base state when tree has focus."""
 
-    help_category = "Object Explorer"
+    help_category = "Explorer"
 
     def _setup_actions(self) -> None:
         self.allows("new_connection", key="n", label="New", help="New connection")
@@ -467,7 +467,7 @@ class TreeFocusedState(State):
 class TreeOnConnectionState(State):
     """Tree focused on a connection node."""
 
-    help_category = "Object Explorer"
+    help_category = "Explorer"
 
     def _setup_actions(self) -> None:
         def can_connect(app: SSMSTUI) -> bool:
@@ -559,7 +559,7 @@ class TreeOnConnectionState(State):
 class TreeOnTableState(State):
     """Tree focused on table or view node."""
 
-    help_category = "Object Explorer"
+    help_category = "Explorer"
 
     def _setup_actions(self) -> None:
         self.allows("select_table", key="s", label="Select TOP 100", help="Select TOP 100 (table/view)")
@@ -890,7 +890,7 @@ class UIStateMachine:
         ]
 
         category_order = [
-            "Object Explorer",
+            "Explorer",
             "Query Editor (Normal)",
             "Query Editor (Insert)",
             "Results",

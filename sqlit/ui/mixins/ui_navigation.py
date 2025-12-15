@@ -80,7 +80,7 @@ class UINavigationMixin:
                 label_results.add_class("active")
 
     def action_focus_explorer(self) -> None:
-        """Focus the Object Explorer pane."""
+        """Focus the Explorer pane."""
         if self._fullscreen_mode != "none":
             self._set_fullscreen_mode("none")
         # Unhide explorer if hidden
