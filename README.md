@@ -58,7 +58,9 @@ Throughout my career, the undesputed truth was that SSMS was the only respectabl
 
 When I switched to Linux, I was suddenly unable to return to the devil I know, and I asked myself: _how do I access my data now?_
 
-The popular answer was VS Code's SQL extension. But why should we developers launch a heavy Electron app designed for coding just to execute SQL? I looked for SQL TUIs, but the options were sparse. The ones I found lacked the user-friendliness and immediate "pick-up-and-go" nature of tools I loved, like `lazygit`, and I shortly returning to vscode sql extension.
+The popular answer was VS Code's SQL extension. But why should we developers launch a heavy Electron app designed for coding just to execute SQL?
+
+I had recently grown fond of Terminal UI's for their speed and keybinding focus. I looked for SQL TUIs, but the options were sparse. The ones I found lacked the user-friendliness and immediate "pick-up-and-go" nature of tools I loved, like `lazygit`, and I shortly returning to vscode sql extension.
 
 Something wasn't right. I asked myself, why is it that running SQL queries can't be enjoyable? So I created `sqlit`.
 
