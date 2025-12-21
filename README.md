@@ -17,7 +17,7 @@
 ---
 
 ### *Connect*
-Sqlit supports all major DBMS's: SQL Server, PostgreSQL, MySQL, SQLite, MariaDB, FirebirdSQL, Oracle, DuckDB, CockroachDB, ClickHouse, Turso and Clickhouse.
+Sqlit supports all major DBMS's: SQL Server, PostgreSQL, MySQL, SQLite, MariaDB, FirebirdSQL, Oracle, DuckDB, CockroachDB, ClickHouse, Supabase, CloudFlare D1 and Turso.
 ![Database Providers](demos/demo-providers.gif)
 
 ### **Query**
@@ -37,7 +37,7 @@ Finds running docker sql resources. Connect to your local test servers in second
 
 - **Connection manager** - Save connections, switch between databases without CLI args
 - **Just run `sqlit`** - No CLI config needed, pick a connection and go
-- **Multi-database out of the box** - SQL Server, PostgreSQL, MySQL, SQLite, MariaDB, FirebirdSQL, Oracle, DuckDB, CockroachDB, ClickHouse, Supabase, Turso - no adapters to install
+- **Multi-database out of the box** - SQL Server, PostgreSQL, MySQL, SQLite, MariaDB, FirebirdSQL, Oracle, DuckDB, CockroachDB, ClickHouse, Supabase, Supabase, CloudFlare D1, Turso - no adapters to install
 - **Docker** Connect directly to database docker container
 - **SSH tunnels built-in** - Connect to remote databases securely with password or key auth
 - Secure credentials - Stores your credentials on your OS's credentials store
