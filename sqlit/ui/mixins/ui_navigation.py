@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from textual.timer import Timer
+
+from ...db.providers import get_connection_display_info
 from ..protocols import AppProtocol
 
 if TYPE_CHECKING:
@@ -211,7 +213,7 @@ class UINavigationMixin:
         elif getattr(self, "_connection_failed", False):
             conn_info = "[#ff6b6b]Connection failed[/]"
         elif self.current_config:
-            display_info = self.current_config.get_display_info()
+            display_info = get_connection_display_info(self.current_config)
             source_emoji = self.current_config.get_source_emoji()
             conn_info = f"[#4ADE80]Connected to {source_emoji}{self.current_config.name}[/] ({display_info})"
             if direct_active:

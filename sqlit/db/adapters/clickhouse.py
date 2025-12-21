@@ -21,6 +21,26 @@ class ClickHouseAdapter(DatabaseAdapter):
     - System tables provide metadata (system.databases, system.tables, system.columns)
     """
 
+    @classmethod
+    def badge_label(cls) -> str:
+        return "ClickHouse"
+
+    @classmethod
+    def docker_image_patterns(cls) -> tuple[str, ...]:
+        return ("clickhouse",)
+
+    @classmethod
+    def docker_env_vars(cls) -> dict[str, tuple[str, ...]]:
+        return {
+            "user": ("CLICKHOUSE_USER",),
+            "password": ("CLICKHOUSE_PASSWORD",),
+            "database": ("CLICKHOUSE_DB",),
+        }
+
+    @classmethod
+    def docker_default_user(cls) -> str | None:
+        return "default"
+
     @property
     def name(self) -> str:
         return "ClickHouse"

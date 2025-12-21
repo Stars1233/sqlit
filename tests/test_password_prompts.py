@@ -20,7 +20,7 @@ class TestNeedsDbPassword:
         sqlite_config = ConnectionConfig(
             name="test",
             db_type="sqlite",
-            file_path="/tmp/test.db",
+            options={"file_path": "/tmp/test.db"},
             password="",
         )
         assert not _needs_db_password(sqlite_config)
@@ -28,7 +28,7 @@ class TestNeedsDbPassword:
         duckdb_config = ConnectionConfig(
             name="test",
             db_type="duckdb",
-            file_path="/tmp/test.duckdb",
+            options={"file_path": "/tmp/test.duckdb"},
             password="",
         )
         assert not _needs_db_password(duckdb_config)
@@ -92,7 +92,7 @@ class TestNeedsDbPassword:
             server="localhost",
             username="sa",
             password=None,
-            auth_type="sql",
+            options={"auth_type": "sql"},
         )
         assert _needs_db_password(config)
 
@@ -107,8 +107,7 @@ class TestNeedsDbPassword:
             db_type="mssql",
             server="localhost",
             password=None,
-            auth_type="windows",
-            trusted_connection=True,
+            options={"auth_type": "windows", "trusted_connection": True},
         )
         assert _needs_db_password(config)
 
@@ -119,8 +118,7 @@ class TestNeedsDbPassword:
             db_type="mssql",
             server="localhost",
             password="",  # Explicitly empty
-            auth_type="windows",
-            trusted_connection=True,
+            options={"auth_type": "windows", "trusted_connection": True},
         )
         assert not _needs_db_password(config)
 
@@ -202,7 +200,7 @@ class TestCliPromptForPassword:
         config = ConnectionConfig(
             name="test",
             db_type="sqlite",
-            file_path="/tmp/test.db",
+            options={"file_path": "/tmp/test.db"},
         )
 
         with patch("sqlit.commands.getpass.getpass") as mock_getpass:

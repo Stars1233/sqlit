@@ -26,6 +26,10 @@ class D1Connection:
 class D1Adapter(DatabaseAdapter):
     """Adapter for Cloudflare D1."""
 
+    @classmethod
+    def badge_label(cls) -> str:
+        return "D1"
+
     @property
     def driver_import_names(self) -> tuple[str, ...]:
         return ("requests",)

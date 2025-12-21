@@ -14,6 +14,30 @@ if TYPE_CHECKING:
 class MySQLAdapter(MySQLBaseAdapter):
     """Adapter for MySQL using mysql-connector-python."""
 
+    @classmethod
+    def badge_label(cls) -> str:
+        return "MySQL"
+
+    @classmethod
+    def url_schemes(cls) -> tuple[str, ...]:
+        return ("mysql",)
+
+    @classmethod
+    def docker_image_patterns(cls) -> tuple[str, ...]:
+        return ("mysql",)
+
+    @classmethod
+    def docker_env_vars(cls) -> dict[str, tuple[str, ...]]:
+        return {
+            "user": ("MYSQL_USER",),
+            "password": ("MYSQL_PASSWORD", "MYSQL_ROOT_PASSWORD"),
+            "database": ("MYSQL_DATABASE",),
+        }
+
+    @classmethod
+    def docker_default_user(cls) -> str | None:
+        return "root"
+
     @property
     def name(self) -> str:
         return "MySQL"

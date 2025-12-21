@@ -70,6 +70,15 @@ class SequenceInfo:
     name: str
 
 
+@dataclass(frozen=True)
+class DockerCredentials:
+    """Docker-derived connection credentials."""
+
+    user: str | None
+    password: str | None
+    database: str | None
+
+
 # Type alias for table/view info: (schema, name)
 TableInfo = tuple[str, str]
 
@@ -146,6 +155,16 @@ class DatabaseAdapter(ABC):
         """Human-readable name for this database type."""
         pass
 
+    @classmethod
+    def badge_label(cls) -> str:
+        """Short label used in the UI for this adapter."""
+        return cls.__name__.removesuffix("Adapter")
+
+    @classmethod
+    def url_schemes(cls) -> tuple[str, ...]:
+        """URL schemes supported by this adapter."""
+        return ()
+
     @property
     @abstractmethod
     def supports_multiple_databases(self) -> bool:
@@ -206,6 +225,96 @@ class DatabaseAdapter(ABC):
         cursor = conn.cursor()
         cursor.execute(self.test_query)
         cursor.fetchone()
+
+    @property
+    def driver_setup_kind(self) -> str | None:
+        """Optional driver setup type for UI workflows (e.g., 'odbc')."""
+        return None
+
+    def normalize_config(self, config: ConnectionConfig) -> ConnectionConfig:
+        """Normalize provider-specific config defaults."""
+        return config
+
+    def validate_config(self, config: ConnectionConfig) -> None:
+        """Validate provider-specific config values."""
+        return None
+
+    def get_auth_type(self, config: ConnectionConfig) -> Any | None:
+        """Return the provider-specific auth type, if applicable."""
+        return None
+
+    def apply_database_override(self, config: ConnectionConfig, database: str) -> ConnectionConfig:
+        """Apply a query-time database override if supported."""
+        return config
+
+    def get_post_connect_warnings(self, config: ConnectionConfig) -> list[str]:
+        """Return warning messages after a successful connection."""
+        return []
+
+    def get_display_info(self, config: ConnectionConfig) -> str:
+        """Return a short, human-readable summary for UI labels."""
+        db_part = f"@{config.database}" if config.database else ""
+        return f"{config.name}{db_part}"
+
+    def build_connection_string(self, config: ConnectionConfig) -> str:
+        """Build a connection string for adapters that support it."""
+        raise NotImplementedError(f"{self.name} does not support connection strings")
+
+    @classmethod
+    def docker_image_patterns(cls) -> tuple[str, ...]:
+        """Docker image substrings used to identify this provider."""
+        return ()
+
+    @classmethod
+    def docker_env_vars(cls) -> dict[str, tuple[str, ...]]:
+        """Environment variables used to extract docker credentials."""
+        return {
+            "user": (),
+            "password": (),
+            "database": (),
+        }
+
+    @classmethod
+    def docker_default_user(cls) -> str | None:
+        return None
+
+    @classmethod
+    def docker_default_database(cls) -> str | None:
+        return None
+
+    @classmethod
+    def docker_preferred_host(cls) -> str:
+        return "localhost"
+
+    @classmethod
+    def match_docker_image(cls, image_name: str) -> bool:
+        image_lower = image_name.lower()
+        return any(pattern in image_lower for pattern in cls.docker_image_patterns())
+
+    @classmethod
+    def get_docker_credentials(cls, env_vars: dict[str, str]) -> DockerCredentials:
+        def get_first(values: tuple[str, ...]) -> str | None:
+            for key in values:
+                if key in env_vars:
+                    return env_vars[key]
+            return None
+
+        env_map = cls.docker_env_vars()
+        user = get_first(tuple(env_map.get("user", ())))
+        password = get_first(tuple(env_map.get("password", ())))
+        database = get_first(tuple(env_map.get("database", ())))
+
+        if not user:
+            user = cls.docker_default_user()
+        if not database:
+            database = cls.docker_default_database()
+
+        return DockerCredentials(user=user, password=password, database=database)
+
+    @classmethod
+    def normalize_docker_connection(cls, config: ConnectionConfig) -> ConnectionConfig:
+        """Adjust a ConnectionConfig created from a docker container."""
+        return config
 
     def format_table_name(self, schema: str, name: str) -> str:
         """Format a table name for display, omitting default schema.
@@ -450,6 +559,18 @@ class MySQLBaseAdapter(CursorBasedAdapter):
     @property
     def supports_stored_procedures(self) -> bool:
         return True
+
+    @classmethod
+    def docker_preferred_host(cls) -> str:
+        return "127.0.0.1"
+
+    @classmethod
+    def get_docker_credentials(cls, env_vars: dict[str, str]) -> DockerCredentials:
+        creds = super().get_docker_credentials(env_vars)
+        user = creds.user
+        if not user and creds.password:
+            user = "root"
+        return DockerCredentials(user=user, password=creds.password, database=creds.database)
 
     def get_databases(self, conn: Any) -> list[str]:
         """Get list of databases."""

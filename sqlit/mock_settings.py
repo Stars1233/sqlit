@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from dataclasses import fields
 from typing import Any
 
 from .config import ConnectionConfig
@@ -108,14 +107,12 @@ def build_mock_profile_from_settings(settings: dict[str, Any]) -> MockProfile | 
 def _parse_connections(raw: Any) -> list[ConnectionConfig]:
     if not isinstance(raw, list):
         return []
-    allowed_fields = {f.name for f in fields(ConnectionConfig)}
     connections: list[ConnectionConfig] = []
     for item in raw:
         if not isinstance(item, dict):
             continue
-        payload = {k: v for k, v in item.items() if k in allowed_fields}
         try:
-            connections.append(ConnectionConfig(**payload))
+            connections.append(ConnectionConfig.from_dict(item))
         except TypeError:
             continue
     return connections

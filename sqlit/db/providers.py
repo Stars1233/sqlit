@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from functools import lru_cache
+from importlib import import_module
 from typing import TYPE_CHECKING
 
 # Pre-import all schemas (no external dependencies)
@@ -30,45 +32,70 @@ from .schema import (
     ConnectionSchema,
 )
 
-# Pre-import all adapter classes (they lazy-load their dependencies internally)
-from .adapters.clickhouse import ClickHouseAdapter
-from .adapters.cockroachdb import CockroachDBAdapter
-from .adapters.d1 import D1Adapter
-from .adapters.duckdb import DuckDBAdapter
-from .adapters.firebird import FirebirdAdapter
-from .adapters.mariadb import MariaDBAdapter
-from .adapters.mssql import SQLServerAdapter
-from .adapters.mysql import MySQLAdapter
-from .adapters.oracle import OracleAdapter
-from .adapters.postgresql import PostgreSQLAdapter
-from .adapters.sqlite import SQLiteAdapter
-from .adapters.supabase import SupabaseAdapter
-from .adapters.turso import TursoAdapter
-
 if TYPE_CHECKING:
+    from ..config import ConnectionConfig
     from .adapters.base import DatabaseAdapter
 
 
 @dataclass(frozen=True)
 class ProviderSpec:
     schema: ConnectionSchema
-    adapter_class: type["DatabaseAdapter"]
+    adapter_path: tuple[str, str]
 
 
 PROVIDERS: dict[str, ProviderSpec] = {
-    "mssql": ProviderSpec(schema=MSSQL_SCHEMA, adapter_class=SQLServerAdapter),
-    "sqlite": ProviderSpec(schema=SQLITE_SCHEMA, adapter_class=SQLiteAdapter),
-    "postgresql": ProviderSpec(schema=POSTGRESQL_SCHEMA, adapter_class=PostgreSQLAdapter),
-    "mysql": ProviderSpec(schema=MYSQL_SCHEMA, adapter_class=MySQLAdapter),
-    "oracle": ProviderSpec(schema=ORACLE_SCHEMA, adapter_class=OracleAdapter),
-    "mariadb": ProviderSpec(schema=MARIADB_SCHEMA, adapter_class=MariaDBAdapter),
-    "duckdb": ProviderSpec(schema=DUCKDB_SCHEMA, adapter_class=DuckDBAdapter),
-    "cockroachdb": ProviderSpec(schema=COCKROACHDB_SCHEMA, adapter_class=CockroachDBAdapter),
-    "turso": ProviderSpec(schema=TURSO_SCHEMA, adapter_class=TursoAdapter),
-    "supabase": ProviderSpec(schema=SUPABASE_SCHEMA, adapter_class=SupabaseAdapter),
-    "d1": ProviderSpec(schema=D1_SCHEMA, adapter_class=D1Adapter),
-    "clickhouse": ProviderSpec(schema=CLICKHOUSE_SCHEMA, adapter_class=ClickHouseAdapter),
-    "firebird": ProviderSpec(schema=FIREBIRD_SCHEMA, adapter_class=FirebirdAdapter),
+    "mssql": ProviderSpec(
+        schema=MSSQL_SCHEMA,
+        adapter_path=("sqlit.db.adapters.mssql", "SQLServerAdapter"),
+    ),
+    "sqlite": ProviderSpec(
+        schema=SQLITE_SCHEMA,
+        adapter_path=("sqlit.db.adapters.sqlite", "SQLiteAdapter"),
+    ),
+    "postgresql": ProviderSpec(
+        schema=POSTGRESQL_SCHEMA,
+        adapter_path=("sqlit.db.adapters.postgresql", "PostgreSQLAdapter"),
+    ),
+    "mysql": ProviderSpec(
+        schema=MYSQL_SCHEMA,
+        adapter_path=("sqlit.db.adapters.mysql", "MySQLAdapter"),
+    ),
+    "oracle": ProviderSpec(
+        schema=ORACLE_SCHEMA,
+        adapter_path=("sqlit.db.adapters.oracle", "OracleAdapter"),
+    ),
+    "mariadb": ProviderSpec(
+        schema=MARIADB_SCHEMA,
+        adapter_path=("sqlit.db.adapters.mariadb", "MariaDBAdapter"),
+    ),
+    "duckdb": ProviderSpec(
+        schema=DUCKDB_SCHEMA,
+        adapter_path=("sqlit.db.adapters.duckdb", "DuckDBAdapter"),
+    ),
+    "cockroachdb": ProviderSpec(
+        schema=COCKROACHDB_SCHEMA,
+        adapter_path=("sqlit.db.adapters.cockroachdb", "CockroachDBAdapter"),
+    ),
+    "turso": ProviderSpec(
+        schema=TURSO_SCHEMA,
+        adapter_path=("sqlit.db.adapters.turso", "TursoAdapter"),
+    ),
+    "supabase": ProviderSpec(
+        schema=SUPABASE_SCHEMA,
+        adapter_path=("sqlit.db.adapters.supabase", "SupabaseAdapter"),
+    ),
+    "d1": ProviderSpec(
+        schema=D1_SCHEMA,
+        adapter_path=("sqlit.db.adapters.d1", "D1Adapter"),
+    ),
+    "clickhouse": ProviderSpec(
+        schema=CLICKHOUSE_SCHEMA,
+        adapter_path=("sqlit.db.adapters.clickhouse", "ClickHouseAdapter"),
+    ),
+    "firebird": ProviderSpec(
+        schema=FIREBIRD_SCHEMA,
+        adapter_path=("sqlit.db.adapters.firebird", "FirebirdAdapter"),
+    ),
 }
 
 
@@ -93,6 +120,52 @@ def get_connection_schema(db_type: str) -> ConnectionSchema:
 
 def get_all_schemas() -> dict[str, ConnectionSchema]:
     return {k: v.schema for k, v in PROVIDERS.items()}
+
+
+@lru_cache(maxsize=1)
+def _get_url_scheme_map() -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for db_type in PROVIDERS:
+        adapter_class = get_adapter_class(db_type)
+        for scheme in adapter_class.url_schemes():
+            mapping[scheme] = db_type
+    return mapping
+
+
+def get_url_scheme_map() -> dict[str, str]:
+    return dict(_get_url_scheme_map())
+
+
+def get_db_type_for_scheme(scheme: str) -> str | None:
+    return _get_url_scheme_map().get(scheme.lower())
+
+
+def get_supported_url_schemes() -> set[str]:
+    return set(_get_url_scheme_map().keys())
+
+
+def _apply_schema_defaults(config: "ConnectionConfig", schema: ConnectionSchema) -> "ConnectionConfig":
+    if (
+        not config.port
+        and schema.default_port
+        and any(field.name == "port" for field in schema.fields)
+    ):
+        config.port = schema.default_port
+    return config
+
+
+def normalize_connection_config(config: "ConnectionConfig") -> "ConnectionConfig":
+    """Normalize provider-specific defaults and run adapter validation."""
+    try:
+        schema = get_connection_schema(config.db_type)
+    except ValueError:
+        return config
+
+    config = _apply_schema_defaults(config, schema)
+    adapter = get_adapter_class(config.db_type)()
+    config = adapter.normalize_config(config)
+    adapter.validate_config(config)
+    return config
 
 
 def _check_mock_missing_driver(db_type: str, adapter: "DatabaseAdapter") -> None:
@@ -123,7 +196,17 @@ def get_adapter(db_type: str) -> "DatabaseAdapter":
 
 
 def get_adapter_class(db_type: str) -> type["DatabaseAdapter"]:
-    return get_provider_spec(db_type).adapter_class
+    module_name, class_name = get_provider_spec(db_type).adapter_path
+    return _load_adapter_class(module_name, class_name)
+
+
+@lru_cache(maxsize=None)
+def _load_adapter_class(module_name: str, class_name: str) -> type["DatabaseAdapter"]:
+    module = import_module(module_name)
+    adapter_class = getattr(module, class_name, None)
+    if not isinstance(adapter_class, type):
+        raise ImportError(f"Adapter class '{class_name}' not found in {module_name}")
+    return adapter_class
 
 
 def get_default_port(db_type: str) -> str:
@@ -136,6 +219,23 @@ def get_default_port(db_type: str) -> str:
 def get_display_name(db_type: str) -> str:
     spec = PROVIDERS.get(db_type)
     return spec.schema.display_name if spec else db_type
+
+
+def get_badge_label(db_type: str) -> str:
+    try:
+        adapter_class = get_adapter_class(db_type)
+    except ValueError:
+        return db_type.upper() if db_type else "DB"
+    return adapter_class.badge_label()
+
+
+def get_connection_display_info(config: "ConnectionConfig") -> str:
+    """Return a human-friendly label for a connection."""
+    try:
+        adapter_class = get_adapter_class(config.db_type)
+    except ValueError:
+        return config.name
+    return adapter_class().get_display_info(config)
 
 
 def supports_ssh(db_type: str) -> bool:

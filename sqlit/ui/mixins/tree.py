@@ -9,6 +9,7 @@ from textual.widgets import Tree
 
 from ..protocols import AppProtocol
 from .query import SPINNER_FRAMES
+from ...db.providers import get_badge_label, get_connection_display_info
 from ..tree_nodes import (
     ColumnNode,
     ConnectionNode,
@@ -33,21 +34,10 @@ class TreeMixin:
 
     def _db_type_badge(self, db_type: str) -> str:
         """Get short badge for database type."""
-        badge_map = {
-            "mssql": "MSSQL",
-            "postgresql": "PG",
-            "mysql": "MySQL",
-            "mariadb": "MariaDB",
-            "sqlite": "SQLite",
-            "oracle": "Oracle",
-            "duckdb": "DuckDB",
-            "cockroachdb": "CRDB",
-            "turso": "Turso",
-        }
-        return badge_map.get(db_type, db_type.upper() if db_type else "DB")
+        return get_badge_label(db_type)
 
     def _format_connection_label(self, conn: Any, status: str, spinner: str | None = None) -> str:
-        display_info = escape_markup(conn.get_display_info())
+        display_info = escape_markup(get_connection_display_info(conn))
         db_type_label = self._db_type_badge(conn.db_type)
         escaped_name = escape_markup(conn.name)
         source_emoji = conn.get_source_emoji()
@@ -65,6 +55,21 @@ class TreeMixin:
         idx = getattr(self, "_connect_spinner_index", 0)
         return SPINNER_FRAMES[idx % len(SPINNER_FRAMES)]
 
+    def _get_node_kind(self, node: Any) -> str:
+        data = getattr(node, "data", None)
+        if data is None:
+            return ""
+        getter = getattr(data, "get_node_kind", None)
+        if callable(getter):
+            return str(getter())
+        return ""
+
+    def _get_node_path_part(self, data: Any) -> str:
+        getter = getattr(data, "get_node_path_part", None)
+        if callable(getter):
+            return str(getter())
+        return ""
+
     def _update_connecting_indicator(self: AppProtocol) -> None:
         connecting_config = getattr(self, "_connecting_config", None)
         if not connecting_config:
@@ -74,7 +79,7 @@ class TreeMixin:
         label = self._format_connection_label(connecting_config, "connecting", spinner=spinner)
 
         for node in self.object_tree.root.children:
-            if isinstance(node.data, ConnectionNode) and node.data.config.name == connecting_config.name:
+            if self._get_node_kind(node) == "connection" and node.data.config.name == connecting_config.name:
                 node.set_label(label)
                 node.allow_expand = False
                 break
@@ -126,7 +131,7 @@ class TreeMixin:
         adapter = self.current_adapter
 
         def get_conn_label(config: Any, connected: Any = False) -> str:
-            display_info = escape_markup(config.get_display_info())
+            display_info = escape_markup(get_connection_display_info(config))
             db_type_label = self._db_type_badge(config.db_type)
             escaped_name = escape_markup(config.name)
             source_emoji = config.get_source_emoji() if hasattr(config, "get_source_emoji") else ""
@@ -138,7 +143,7 @@ class TreeMixin:
 
         active_node = None
         for child in self.object_tree.root.children:
-            if isinstance(child.data, ConnectionNode):
+            if self._get_node_kind(child) == "connection":
                 if child.data.config.name == self.current_config.name:
                     child.set_label(get_conn_label(self.current_config, connected=True))
                     active_node = child
@@ -226,17 +231,10 @@ class TreeMixin:
         current = node
         while current and current.parent:
             data = current.data
-            if isinstance(data, ConnectionNode):
-                parts.append(f"conn:{data.config.name}")
-            elif isinstance(data, DatabaseNode):
-                parts.append(f"db:{data.name}")
-            elif isinstance(data, FolderNode):
-                parts.append(f"folder:{data.folder_type}")
-            elif isinstance(data, SchemaNode):
-                parts.append(f"schema:{data.schema}")
-            elif isinstance(data, TableNode | ViewNode):
-                node_type = "table" if isinstance(data, TableNode) else "view"
-                parts.append(f"{node_type}:{data.schema}.{data.name}")
+            if data:
+                path_part = self._get_node_path_part(data)
+                if path_part:
+                    parts.append(path_part)
             current = current.parent
         return "/".join(reversed(parts))
 
@@ -289,9 +287,9 @@ class TreeMixin:
         children = list(node.children)
         if children:
             # Check if it's just a loading placeholder
-            if len(children) == 1 and isinstance(children[0].data, LoadingNode):
+            if len(children) == 1 and self._get_node_kind(children[0]) == "loading":
                 return  # Already loading
-            if not isinstance(children[0].data, LoadingNode):
+            if self._get_node_kind(children[0]) != "loading":
                 return  # Already loaded
 
         # Initialize _loading_nodes if not present
@@ -304,7 +302,7 @@ class TreeMixin:
             return  # Already loading this node
 
         # Handle table/view column expansion
-        if isinstance(data, TableNode | ViewNode):
+        if self._get_node_kind(node) in ("table", "view"):
             self._loading_nodes.add(node_path)
             loading_node = node.add_leaf("[dim italic]Loading...[/]")
             loading_node.data = LoadingNode()
@@ -312,7 +310,7 @@ class TreeMixin:
             return
 
         # Handle folder expansion (database can be None for single-db adapters)
-        if isinstance(data, FolderNode):
+        if self._get_node_kind(node) == "folder":
             self._loading_nodes.add(node_path)
             loading_node = node.add_leaf("[dim italic]Loading...[/]")
             loading_node.data = LoadingNode()
@@ -350,7 +348,7 @@ class TreeMixin:
         self._loading_nodes.discard(node_path)
 
         for child in list(node.children):
-            if isinstance(child.data, LoadingNode):
+            if self._get_node_kind(child) == "loading":
                 child.remove()
 
         for col in columns:
@@ -413,7 +411,7 @@ class TreeMixin:
         self._loading_nodes.discard(node_path)
 
         for child in list(node.children):
-            if isinstance(child.data, LoadingNode):
+            if self._get_node_kind(child) == "loading":
                 child.remove()
 
         if not self._session:
@@ -500,7 +498,7 @@ class TreeMixin:
         self._loading_nodes.discard(node_path)
 
         for child in list(node.children):
-            if isinstance(child.data, LoadingNode):
+            if self._get_node_kind(child) == "loading":
                 child.remove()
 
         self.notify(escape_markup(error_message), severity="error")
@@ -519,7 +517,7 @@ class TreeMixin:
 
         data = node.data
 
-        if isinstance(data, ConnectionNode):
+        if self._get_node_kind(node) == "connection":
             config = data.config
             if self.current_config and self.current_config.name == config.name:
                 return
@@ -570,7 +568,7 @@ class TreeMixin:
         data = node.data
 
         # Handle table/view - execute SELECT query
-        if isinstance(data, TableNode | ViewNode):
+        if self._get_node_kind(node) in ("table", "view"):
             # Store table info for edit_cell action
             try:
                 columns = self._session.adapter.get_columns(
@@ -590,17 +588,17 @@ class TreeMixin:
             return
 
         # Handle index - show index definition
-        if isinstance(data, IndexNode):
+        if self._get_node_kind(node) == "index":
             self._show_index_info(data)
             return
 
         # Handle trigger - show trigger definition
-        if isinstance(data, TriggerNode):
+        if self._get_node_kind(node) == "trigger":
             self._show_trigger_info(data)
             return
 
         # Handle sequence - show sequence info
-        if isinstance(data, SequenceNode):
+        if self._get_node_kind(node) == "sequence":
             self._show_sequence_info(data)
             return
 

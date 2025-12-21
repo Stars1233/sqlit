@@ -14,19 +14,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import TYPE_CHECKING
-
-from .ui.tree_nodes import (
-    ConnectionNode,
-    DatabaseNode,
-    FolderNode,
-    IndexNode,
-    SchemaNode,
-    SequenceNode,
-    TableNode,
-    TriggerNode,
-    ViewNode,
-)
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .app import SSMSTUI
@@ -97,6 +85,16 @@ def get_leader_bindings() -> tuple:
     from textual.binding import Binding
 
     return tuple(Binding(cmd.key, cmd.binding_action, show=False) for cmd in get_leader_commands())
+
+
+def _get_node_kind(node: Any) -> str:
+    data = getattr(node, "data", None)
+    if data is None:
+        return ""
+    getter = getattr(data, "get_node_kind", None)
+    if callable(getter):
+        return str(getter())
+    return ""
 
 
 class ActionResult(Enum):
@@ -491,7 +489,7 @@ class TreeOnConnectionState(State):
     def _setup_actions(self) -> None:
         def can_connect(app: SSMSTUI) -> bool:
             node = app.object_tree.cursor_node
-            if not node or not isinstance(node.data, ConnectionNode):
+            if not node or _get_node_kind(node) != "connection":
                 return False
             config = node.data.config
             if not app.current_connection:
@@ -500,7 +498,7 @@ class TreeOnConnectionState(State):
 
         def is_connected_to_this(app: SSMSTUI) -> bool:
             node = app.object_tree.cursor_node
-            if not node or not isinstance(node.data, ConnectionNode):
+            if not node or _get_node_kind(node) != "connection":
                 return False
             config = node.data.config
             return bool(
@@ -522,7 +520,7 @@ class TreeOnConnectionState(State):
         seen: set[str] = set()
 
         node = app.object_tree.cursor_node
-        config = node.data.config if node and isinstance(node.data, ConnectionNode) else None
+        config = node.data.config if node and _get_node_kind(node) == "connection" else None
         is_connected = (
             app.current_connection is not None
             and config
@@ -564,7 +562,7 @@ class TreeOnConnectionState(State):
         if not app.object_tree.has_focus:
             return False
         node = app.object_tree.cursor_node
-        return node is not None and isinstance(node.data, ConnectionNode)
+        return node is not None and _get_node_kind(node) == "connection"
 
 
 class TreeOnTableState(State):
@@ -600,7 +598,7 @@ class TreeOnTableState(State):
         if not app.object_tree.has_focus:
             return False
         node = app.object_tree.cursor_node
-        return node is not None and isinstance(node.data, TableNode | ViewNode)
+        return node is not None and _get_node_kind(node) in ("table", "view")
 
 
 class TreeOnFolderState(State):
@@ -632,7 +630,7 @@ class TreeOnFolderState(State):
         if not app.object_tree.has_focus:
             return False
         node = app.object_tree.cursor_node
-        return node is not None and isinstance(node.data, FolderNode | DatabaseNode | SchemaNode)
+        return node is not None and _get_node_kind(node) in ("folder", "database", "schema")
 
 
 class TreeOnObjectState(State):
@@ -666,7 +664,7 @@ class TreeOnObjectState(State):
         if not app.object_tree.has_focus:
             return False
         node = app.object_tree.cursor_node
-        return node is not None and isinstance(node.data, IndexNode | TriggerNode | SequenceNode)
+        return node is not None and _get_node_kind(node) in ("index", "trigger", "sequence")
 
 
 class QueryFocusedState(State):

@@ -14,6 +14,30 @@ if TYPE_CHECKING:
 class CockroachDBAdapter(PostgresBaseAdapter):
     """Adapter for CockroachDB using psycopg2 (PostgreSQL wire-compatible)."""
 
+    @classmethod
+    def badge_label(cls) -> str:
+        return "CRDB"
+
+    @classmethod
+    def url_schemes(cls) -> tuple[str, ...]:
+        return ("cockroachdb", "cockroach")
+
+    @classmethod
+    def docker_image_patterns(cls) -> tuple[str, ...]:
+        return ("cockroachdb",)
+
+    @classmethod
+    def docker_env_vars(cls) -> dict[str, tuple[str, ...]]:
+        return {
+            "user": ("COCKROACH_USER",),
+            "password": ("COCKROACH_PASSWORD",),
+            "database": ("COCKROACH_DATABASE",),
+        }
+
+    @classmethod
+    def docker_default_user(cls) -> str | None:
+        return "root"
+
     @property
     def name(self) -> str:
         return "CockroachDB"

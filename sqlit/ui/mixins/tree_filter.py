@@ -8,19 +8,6 @@ from rich.markup import escape as escape_markup
 
 from ...utils import fuzzy_match, highlight_matches
 from ..protocols import AppProtocol
-from ..tree_nodes import (
-    ColumnNode,
-    ConnectionNode,
-    DatabaseNode,
-    FolderNode,
-    IndexNode,
-    ProcedureNode,
-    SchemaNode,
-    SequenceNode,
-    TableNode,
-    TriggerNode,
-    ViewNode,
-)
 
 if TYPE_CHECKING:
     pass
@@ -203,29 +190,9 @@ class TreeFilterMixin:
         data = node.data
         if data is None:
             return ""
-
-        if isinstance(data, ConnectionNode):
-            return data.config.name
-        elif isinstance(data, DatabaseNode):
-            return data.name
-        elif isinstance(data, FolderNode):
-            return data.folder_type
-        elif isinstance(data, SchemaNode):
-            return data.schema
-        elif isinstance(data, TableNode):
-            return data.name
-        elif isinstance(data, ViewNode):
-            return data.name
-        elif isinstance(data, ProcedureNode):
-            return data.name
-        elif isinstance(data, ColumnNode):
-            return data.name
-        elif isinstance(data, IndexNode):
-            return data.name
-        elif isinstance(data, TriggerNode):
-            return data.name
-        elif isinstance(data, SequenceNode):
-            return data.name
+        label_getter = getattr(data, "get_label_text", None)
+        if callable(label_getter):
+            return label_getter()
         return ""
 
     def _rebuild_label_with_highlight(self, node: Any, highlighted_text: str) -> str:
@@ -233,20 +200,6 @@ class TreeFilterMixin:
         data = node.data
         if data is None:
             return highlighted_text
-
-        # For simple nodes, just return highlighted text
-        if isinstance(data, TableNode | ViewNode | ProcedureNode):
-            return highlighted_text
-        elif isinstance(data, ColumnNode):
-            # Columns show "name type" format - only highlight name
-            return highlighted_text
-        elif isinstance(data, ConnectionNode):
-            # Connections have format "[color]* name[/] [TYPE] (info)"
-            # Just replace the name portion
-            return highlighted_text
-        elif isinstance(data, DatabaseNode | SchemaNode | FolderNode):
-            return highlighted_text
-
         return highlighted_text
 
     def _apply_filter_to_tree(self: AppProtocol) -> None:

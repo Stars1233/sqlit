@@ -19,6 +19,30 @@ class MariaDBAdapter(MySQLBaseAdapter):
     introspection methods that use parameterized queries.
     """
 
+    @classmethod
+    def badge_label(cls) -> str:
+        return "MariaDB"
+
+    @classmethod
+    def url_schemes(cls) -> tuple[str, ...]:
+        return ("mariadb",)
+
+    @classmethod
+    def docker_image_patterns(cls) -> tuple[str, ...]:
+        return ("mariadb",)
+
+    @classmethod
+    def docker_env_vars(cls) -> dict[str, tuple[str, ...]]:
+        return {
+            "user": ("MARIADB_USER", "MYSQL_USER"),
+            "password": ("MARIADB_PASSWORD", "MARIADB_ROOT_PASSWORD", "MYSQL_PASSWORD", "MYSQL_ROOT_PASSWORD"),
+            "database": ("MARIADB_DATABASE", "MYSQL_DATABASE"),
+        }
+
+    @classmethod
+    def docker_default_user(cls) -> str | None:
+        return "root"
+
     @property
     def name(self) -> str:
         return "MariaDB"
@@ -39,6 +63,14 @@ class MariaDBAdapter(MySQLBaseAdapter):
     def supports_sequences(self) -> bool:
         """MariaDB 10.3+ supports sequences."""
         return getattr(self, "_supports_sequences", True)
+
+    def get_post_connect_warnings(self, config: ConnectionConfig) -> list[str]:
+        if self.supports_sequences:
+            return []
+        version = getattr(self, "_server_version_str", None)
+        if isinstance(version, str) and version:
+            return [f"MariaDB {version} does not support sequences (requires 10.3+)"]
+        return ["MariaDB does not support sequences (requires 10.3+)"]
 
     def connect(self, config: ConnectionConfig) -> Any:
         """Connect to MariaDB database."""

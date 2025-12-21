@@ -2,9 +2,15 @@
 
 from typing import TYPE_CHECKING, Any
 
-from sqlit.db.adapters.base import IndexInfo, SequenceInfo, TriggerInfo
-
-from .base import ColumnInfo, CursorBasedAdapter, TableInfo
+from .base import (
+    ColumnInfo,
+    CursorBasedAdapter,
+    IndexInfo,
+    SequenceInfo,
+    TableInfo,
+    TriggerInfo,
+    import_driver_module,
+)
 
 if TYPE_CHECKING:
     from ...config import ConnectionConfig
@@ -12,6 +18,30 @@ if TYPE_CHECKING:
 
 class FirebirdAdapter(CursorBasedAdapter):
     """Adapter for Firebird using pyfirebirdsql."""
+
+    @classmethod
+    def badge_label(cls) -> str:
+        return "FB"
+
+    @classmethod
+    def url_schemes(cls) -> tuple[str, ...]:
+        return ("firebird",)
+
+    @classmethod
+    def docker_image_patterns(cls) -> tuple[str, ...]:
+        return ("firebirdsql/firebird",)
+
+    @classmethod
+    def docker_env_vars(cls) -> dict[str, tuple[str, ...]]:
+        return {
+            "user": ("FIREBIRD_USER",),
+            "password": ("FIREBIRD_PASSWORD",),
+            "database": ("FIREBIRD_DATABASE",),
+        }
+
+    @classmethod
+    def docker_default_user(cls) -> str | None:
+        return "SYSDBA"
 
     @property
     def name(self) -> str:
@@ -57,7 +87,12 @@ class FirebirdAdapter(CursorBasedAdapter):
 
     def connect(self, config: "ConnectionConfig") -> Any:
         """Connect to a Firebird database."""
-        import firebirdsql
+        firebirdsql = import_driver_module(
+            "firebirdsql",
+            driver_name=self.name,
+            extra_name=self.install_extra,
+            package_name=self.install_package,
+        )
 
         conn = firebirdsql.connect(
             host=config.server or "localhost",

@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any
 
 from ..protocols import AppProtocol
 from .query import SPINNER_FRAMES
-from ..tree_nodes import ConnectionNode
 
 if TYPE_CHECKING:
     from ...config import ConnectionConfig
@@ -70,6 +69,18 @@ class ConnectionMixin:
             ssh_password = service.get_ssh_password(config.name)
             if ssh_password is not None:
                 config.ssh_password = ssh_password
+
+    def _get_connection_config_from_data(self, data: Any) -> ConnectionConfig | None:
+        if data is None:
+            return None
+        getter = getattr(data, "get_connection_config", None)
+        if callable(getter):
+            return getter()
+        return None
+
+    def _get_connection_config_from_node(self, node: Any) -> ConnectionConfig | None:
+        data = getattr(node, "data", None)
+        return self._get_connection_config_from_data(data)
 
     def connect_to_server(self: AppProtocol, config: ConnectionConfig) -> None:
         """Connect to a database (async, non-blocking).
@@ -209,13 +220,10 @@ class ConnectionMixin:
             self._load_schema_cache()
             self._update_status_bar()
             self._update_section_labels()
-            if config.db_type == "mariadb" and self.current_adapter and not self.current_adapter.supports_sequences:
-                version = getattr(self.current_adapter, "_server_version_str", None)
-                if isinstance(version, str) and version:
-                    message = f"MariaDB {version} does not support sequences (requires 10.3+)"
-                else:
-                    message = "MariaDB does not support sequences (requires 10.3+)"
-                self.notify(message, severity="warning")
+            if self.current_adapter:
+                warnings = self.current_adapter.get_post_connect_warnings(config)
+                for message in warnings:
+                    self.notify(message, severity="warning")
 
         def on_error(error: Exception) -> None:
             # Ignore if a newer connection attempt was started
@@ -223,82 +231,16 @@ class ConnectionMixin:
                 return
 
             self._set_connecting_state(None, refresh=True)
-            from ...config import save_connections
-            from ...db.exceptions import MissingDriverError, MissingODBCDriverError
-            from ...terminal import run_in_terminal
-            from ..screens import ConfirmScreen, DriverSetupScreen, ErrorScreen, MessageScreen
+            from ..connection_error_handlers import handle_connection_error
+            from ..screens import ErrorScreen
 
             self._connection_failed = True
             self._update_status_bar()
 
-            if isinstance(error, MissingDriverError):
-                from ...services.installer import Installer
-                from ..screens import PackageSetupScreen
+            if handle_connection_error(self, error, config):
+                return
 
-                self.push_screen(
-                    PackageSetupScreen(error, on_install=lambda err: Installer(self).install(err)),
-                )
-            elif isinstance(error, MissingODBCDriverError):
-
-                def on_confirm(confirmed: bool | None) -> None:
-                    if confirmed is not True:
-                        self.push_screen(
-                            MessageScreen(
-                                "Missing ODBC driver",
-                                (
-                                    "SQL Server requires an ODBC driver.\n\n"
-                                    "Open connection settings (Advanced) to configure drivers."
-                                ),
-                            )
-                        )
-                        return
-
-                    def on_driver_result(result: Any) -> None:
-                        if not result:
-                            return
-                        action = result[0]
-                        if action == "select":
-                            driver = result[1]
-                            config.driver = driver
-                            for i, c in enumerate(self.connections):
-                                if c.name == config.name:
-                                    self.connections[i] = config
-                                    break
-                            save_connections(self.connections)
-                            self.call_later(lambda: self.connect_to_server(config))
-                            return
-                        if action == "install":
-                            commands = result[1]
-                            res = run_in_terminal(commands)
-                            if res.success:
-                                self.push_screen(
-                                    MessageScreen(
-                                        "Driver install",
-                                        "Installation started in a new terminal.\n\nPlease restart to apply.",
-                                    )
-                                )
-                            else:
-                                self.push_screen(
-                                    MessageScreen(
-                                        "Couldn't install automatically",
-                                        "Couldn't install automatically, please install manually.",
-                                    ),
-                                    lambda _=None: self.push_screen(
-                                        DriverSetupScreen(error.installed_drivers), on_driver_result
-                                    ),
-                                )
-
-                    self.push_screen(DriverSetupScreen(error.installed_drivers), on_driver_result)
-
-                self.push_screen(
-                    ConfirmScreen(
-                        "Missing ODBC driver",
-                        "SQL Server requires an ODBC driver.\n\nOpen driver setup now?",
-                    ),
-                    on_confirm,
-                )
-            else:
-                self.push_screen(ErrorScreen("Connection Failed", str(error)))
+            self.push_screen(ErrorScreen("Connection Failed", str(error)))
 
         def do_work() -> None:
             try:
@@ -333,7 +275,8 @@ class ConnectionMixin:
         if not self.current_config:
             return
         for node in self.object_tree.root.children:
-            if isinstance(node.data, ConnectionNode) and node.data.config.name == self.current_config.name:
+            config = self._get_connection_config_from_node(node)
+            if config and config.name == self.current_config.name:
                 self.object_tree.move_cursor(node)
                 break
 
@@ -355,15 +298,15 @@ class ConnectionMixin:
 
         node = self.object_tree.cursor_node
 
-        if not node or not node.data:
+        if not node:
             return
 
-        data = node.data
-        if not isinstance(data, ConnectionNode):
+        config = self._get_connection_config_from_node(node)
+        if not config:
             return
 
         self._set_connection_screen_footer()
-        self.push_screen(ConnectionScreen(data.config, editing=True), self._wrap_connection_result)
+        self.push_screen(ConnectionScreen(config, editing=True), self._wrap_connection_result)
 
     def _set_connection_screen_footer(self: AppProtocol) -> None:
         from ...widgets import ContextFooter
@@ -462,14 +405,12 @@ class ConnectionMixin:
 
         node = self.object_tree.cursor_node
 
-        if not node or not node.data:
+        if not node:
             return
 
-        data = node.data
-        if not isinstance(data, ConnectionNode):
+        config = self._get_connection_config_from_node(node)
+        if not config:
             return
-
-        config = data.config
 
         existing_names = {c.name for c in self.connections}
         base_name = config.name
@@ -489,14 +430,12 @@ class ConnectionMixin:
 
         node = self.object_tree.cursor_node
 
-        if not node or not node.data:
+        if not node:
             return
 
-        data = node.data
-        if not isinstance(data, ConnectionNode):
+        config = self._get_connection_config_from_node(node)
+        if not config:
             return
-
-        config = data.config
         is_connected = self.current_config and self.current_config.name == config.name
 
         def do_delete(confirmed: bool | None) -> None:
@@ -539,16 +478,16 @@ class ConnectionMixin:
     def action_connect_selected(self: AppProtocol) -> None:
         node = self.object_tree.cursor_node
 
-        if not node or not node.data:
+        if not node:
             return
 
-        data = node.data
-        if isinstance(data, ConnectionNode):
-            config = data.config
-            if self.current_config and self.current_config.name == config.name:
-                return
-            # Don't disconnect here - we'll disconnect only after successful connection
-            self.connect_to_server(config)
+        config = self._get_connection_config_from_node(node)
+        if not config:
+            return
+        if self.current_config and self.current_config.name == config.name:
+            return
+        # Don't disconnect here - we'll disconnect only after successful connection
+        self.connect_to_server(config)
 
     def action_show_connection_picker(self: AppProtocol) -> None:
         from ..screens import ConnectionPickerScreen
@@ -558,9 +497,7 @@ class ConnectionMixin:
             self._handle_connection_picker_result,
         )
 
-    def _handle_connection_picker_result(self: AppProtocol, result: str | None) -> None:
-        from ..screens.connection_picker import DockerConnectionResult
-
+    def _handle_connection_picker_result(self: AppProtocol, result: Any) -> None:
         if result is None:
             return
 
@@ -569,8 +506,8 @@ class ConnectionMixin:
             self.action_new_connection()
             return
 
-        # Handle Docker container result
-        if isinstance(result, DockerConnectionResult):
+        result_kind = getattr(result, "get_result_kind", None)
+        if callable(result_kind) and result_kind() == "docker":
             self._handle_docker_container_result(result)
             return
 
@@ -578,7 +515,8 @@ class ConnectionMixin:
         config = next((c for c in self.connections if c.name == result), None)
         if config:
             for node in self.object_tree.root.children:
-                if isinstance(node.data, ConnectionNode) and node.data.config.name == result:
+                node_config = self._get_connection_config_from_node(node)
+                if node_config and node_config.name == result:
                     self.object_tree.select_node(node)
                     break
 
@@ -600,7 +538,8 @@ class ConnectionMixin:
         if matching_config:
             # Select the saved connection in tree
             for node in self.object_tree.root.children:
-                if isinstance(node.data, ConnectionNode) and node.data.config.name == matching_config.name:
+                node_config = self._get_connection_config_from_node(node)
+                if node_config and node_config.name == matching_config.name:
                     self.object_tree.select_node(node)
                     break
             # Use the saved config (has the saved name)

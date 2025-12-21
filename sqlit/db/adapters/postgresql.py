@@ -14,6 +14,34 @@ if TYPE_CHECKING:
 class PostgreSQLAdapter(PostgresBaseAdapter):
     """Adapter for PostgreSQL using psycopg2."""
 
+    @classmethod
+    def badge_label(cls) -> str:
+        return "PG"
+
+    @classmethod
+    def url_schemes(cls) -> tuple[str, ...]:
+        return ("postgresql", "postgres")
+
+    @classmethod
+    def docker_image_patterns(cls) -> tuple[str, ...]:
+        return ("postgres",)
+
+    @classmethod
+    def docker_env_vars(cls) -> dict[str, tuple[str, ...]]:
+        return {
+            "user": ("POSTGRES_USER",),
+            "password": ("POSTGRES_PASSWORD",),
+            "database": ("POSTGRES_DB",),
+        }
+
+    @classmethod
+    def docker_default_user(cls) -> str | None:
+        return "postgres"
+
+    @classmethod
+    def docker_default_database(cls) -> str | None:
+        return "postgres"
+
     @property
     def name(self) -> str:
         return "PostgreSQL"

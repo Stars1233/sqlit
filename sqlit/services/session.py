@@ -88,9 +88,12 @@ class ConnectionSession:
             Any database-specific connection errors.
         """
         from ..db import create_ssh_tunnel, get_adapter
+        from ..db.providers import normalize_connection_config
 
         get_adapter_fn = adapter_factory or get_adapter
         create_tunnel_fn = tunnel_factory or create_ssh_tunnel
+
+        config = normalize_connection_config(config)
 
         tunnel, host, port = create_tunnel_fn(config)
 

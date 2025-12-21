@@ -579,7 +579,7 @@ def get_default_mock_adapter(db_type: str) -> MockDatabaseAdapter:
 
 def _matches_connection_rule(config: ConnectionConfig, rule: dict[str, Any]) -> bool:
     for key, value in rule.items():
-        if getattr(config, key, None) != value:
+        if config.get_field_value(key, None) != value:
             return False
     return True
 
@@ -613,7 +613,7 @@ def _create_sqlite_demo_profile() -> MockProfile:
         ConnectionConfig(
             name="Demo SQLite",
             db_type="sqlite",
-            file_path="./demo.db",
+            options={"file_path": "./demo.db"},
         ),
     ]
 
@@ -649,7 +649,7 @@ def _create_multi_db_profile() -> MockProfile:
         ConnectionConfig(
             name="Local SQLite",
             db_type="sqlite",
-            file_path="./local.db",
+            options={"file_path": "./local.db"},
         ),
         ConnectionConfig(
             name="Dev MySQL",
@@ -732,7 +732,7 @@ def _create_perf_test_profile() -> MockProfile:
         ConnectionConfig(
             name="Performance Test DB",
             db_type="sqlite",
-            file_path="./perf_test.db",
+            options={"file_path": "./perf_test.db"},
         ),
     ]
 

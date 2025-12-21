@@ -60,16 +60,12 @@ class ConnectionStore(JSONFileStore):
         if data is None:
             return []
         try:
-            migrated = []
-            for conn in data:
-                if isinstance(conn, dict) and "host" in conn and "server" not in conn:
-                    conn = {**conn, "server": conn.get("host", "")}
-                    conn.pop("host", None)
-                migrated.append(conn)
+            from ..db.providers import normalize_connection_config
 
             configs = []
-            for conn in migrated:
-                config = ConnectionConfig(**conn)
+            for conn in data:
+                config = ConnectionConfig.from_dict(conn)
+                config = normalize_connection_config(config)
                 if load_credentials:
                     # Retrieve passwords from credentials service
                     self._load_credentials(config)
