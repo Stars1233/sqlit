@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/Maxteabag/sqlit/stargazers"><img src="https://img.shields.io/github/stars/Maxteabag/sqlit?style=flat&color=yellow" alt="GitHub Stars"></a>
   <img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
 </p>
@@ -241,6 +242,10 @@ SSH tunnel functionality requires additional dependencies. Install with the `ssh
 | pip | `pip install 'sqlit-tui[ssh]'` |
 
 If you try to create an SSH connection without these dependencies, sqlit will detect this and show you the exact command to install them for your environment.
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Maxteabag/sqlit&type=Date)](https://star-history.com/#Maxteabag/sqlit&Date)
 
 ## License
 
