@@ -30,7 +30,7 @@ class TestOracleAdapterRole:
                 database="ORCL",
                 username="testuser",
                 password="testpass",
-                oracle_role="normal",
+                options={"oracle_role": "normal"},
             )
 
             adapter.connect(config)
@@ -61,7 +61,7 @@ class TestOracleAdapterRole:
                 database="ORCL",
                 username="sys",
                 password="syspass",
-                oracle_role="sysdba",
+                options={"oracle_role": "sysdba"},
             )
 
             adapter.connect(config)
@@ -91,7 +91,7 @@ class TestOracleAdapterRole:
                 database="ORCL",
                 username="sys",
                 password="syspass",
-                oracle_role="sysoper",
+                options={"oracle_role": "sysoper"},
             )
 
             adapter.connect(config)

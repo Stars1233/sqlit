@@ -6,9 +6,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from sqlit.db.providers import get_adapter_class, get_default_port
 from sqlit.mock_settings import set_mock_docker_containers
 from sqlit.services.docker_detector import (
-    DEFAULT_PORTS,
     DetectedContainer,
     DockerStatus,
     _get_container_credentials,
@@ -75,24 +75,24 @@ class TestCredentialExtraction:
             "POSTGRES_PASSWORD": "mypass",
             "POSTGRES_DB": "mydb",
         }
-        creds = _get_container_credentials("postgresql", env_vars)
-        assert creds["user"] == "myuser"
-        assert creds["password"] == "mypass"
-        assert creds["database"] == "mydb"
+        creds = _get_container_credentials(get_adapter_class("postgresql"), env_vars)
+        assert creds.user == "myuser"
+        assert creds.password == "mypass"
+        assert creds.database == "mydb"
 
     def test_postgresql_defaults(self):
         """Test PostgreSQL defaults when no env vars set."""
-        creds = _get_container_credentials("postgresql", {})
-        assert creds["user"] == "postgres"
-        assert creds["password"] is None
-        assert creds["database"] == "postgres"
+        creds = _get_container_credentials(get_adapter_class("postgresql"), {})
+        assert creds.user == "postgres"
+        assert creds.password is None
+        assert creds.database == "postgres"
 
     def test_mysql_root_password(self):
         """Test MySQL with root password."""
         env_vars = {"MYSQL_ROOT_PASSWORD": "rootpass"}
-        creds = _get_container_credentials("mysql", env_vars)
-        assert creds["user"] == "root"
-        assert creds["password"] == "rootpass"
+        creds = _get_container_credentials(get_adapter_class("mysql"), env_vars)
+        assert creds.user == "root"
+        assert creds.password == "rootpass"
 
     def test_mysql_user_credentials(self):
         """Test MySQL with user credentials."""
@@ -101,18 +101,18 @@ class TestCredentialExtraction:
             "MYSQL_PASSWORD": "userpass",
             "MYSQL_DATABASE": "mydb",
         }
-        creds = _get_container_credentials("mysql", env_vars)
-        assert creds["user"] == "myuser"
-        assert creds["password"] == "userpass"
-        assert creds["database"] == "mydb"
+        creds = _get_container_credentials(get_adapter_class("mysql"), env_vars)
+        assert creds.user == "myuser"
+        assert creds.password == "userpass"
+        assert creds.database == "mydb"
 
     def test_mssql_credentials(self):
         """Test SQL Server credential extraction."""
         env_vars = {"SA_PASSWORD": "StrongP@ssw0rd"}
-        creds = _get_container_credentials("mssql", env_vars)
-        assert creds["user"] == "sa"
-        assert creds["password"] == "StrongP@ssw0rd"
-        assert creds["database"] == "master"
+        creds = _get_container_credentials(get_adapter_class("mssql"), env_vars)
+        assert creds.user == "sa"
+        assert creds.password == "StrongP@ssw0rd"
+        assert creds.database == "master"
 
     def test_mariadb_fallback_to_mysql_vars(self):
         """Test MariaDB falls back to MYSQL_ vars."""
@@ -120,9 +120,9 @@ class TestCredentialExtraction:
             "MYSQL_USER": "myuser",
             "MYSQL_PASSWORD": "mypass",
         }
-        creds = _get_container_credentials("mariadb", env_vars)
-        assert creds["user"] == "myuser"
-        assert creds["password"] == "mypass"
+        creds = _get_container_credentials(get_adapter_class("mariadb"), env_vars)
+        assert creds.user == "myuser"
+        assert creds.password == "mypass"
 
 
 class TestHostPortExtraction:
@@ -429,11 +429,11 @@ class TestDetectDatabaseContainers:
 class TestDefaultPorts:
     def test_default_ports_defined(self):
         """Test that default ports are defined for all supported databases."""
-        assert DEFAULT_PORTS["postgresql"] == 5432
-        assert DEFAULT_PORTS["mysql"] == 3306
-        assert DEFAULT_PORTS["mariadb"] == 3306
-        assert DEFAULT_PORTS["mssql"] == 1433
-        assert DEFAULT_PORTS["clickhouse"] == 9000
-        assert DEFAULT_PORTS["cockroachdb"] == 26257
-        assert DEFAULT_PORTS["oracle"] == 1521
-        assert DEFAULT_PORTS["turso"] == 8080
+        assert int(get_default_port("postgresql")) == 5432
+        assert int(get_default_port("mysql")) == 3306
+        assert int(get_default_port("mariadb")) == 3306
+        assert int(get_default_port("mssql")) == 1433
+        assert int(get_default_port("clickhouse")) == 8123
+        assert int(get_default_port("cockroachdb")) == 26257
+        assert int(get_default_port("oracle")) == 1521
+        assert int(get_default_port("turso")) == 8080

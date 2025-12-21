@@ -18,7 +18,7 @@ class TestMockDatabaseAdapter:
 
     def test_connect_returns_connection(self):
         adapter = MockDatabaseAdapter()
-        config = ConnectionConfig(name="test", db_type="sqlite", file_path="/tmp/test.db")
+        config = ConnectionConfig(name="test", db_type="sqlite", options={"file_path": "/tmp/test.db"})
         conn = adapter.connect(config)
         assert isinstance(conn, MockConnection)
         assert not conn.closed
@@ -148,7 +148,7 @@ class TestAdapterInterfaceCompliance:
     def test_all_abstract_methods_callable(self):
         adapter = MockDatabaseAdapter()
         conn = MockConnection()
-        config = ConnectionConfig(name="t", db_type="sqlite", file_path="/tmp/t.db")
+        config = ConnectionConfig(name="t", db_type="sqlite", options={"file_path": "/tmp/t.db"})
 
         _ = adapter.name
         _ = adapter.default_schema

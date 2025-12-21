@@ -243,7 +243,7 @@ def create_test_connection(
     **kwargs,
 ) -> ConnectionConfig:
     """Helper to create test connection configs."""
-    defaults = {
+    defaults: dict[str, object] = {
         "name": name,
         "db_type": db_type,
         "server": "localhost",
@@ -254,4 +254,4 @@ def create_test_connection(
         "file_path": "/tmp/test.db",
     }
     defaults.update(kwargs)
-    return ConnectionConfig(**defaults)
+    return ConnectionConfig.from_dict(defaults)

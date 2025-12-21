@@ -13,6 +13,14 @@ if TYPE_CHECKING:
 class SQLServerAdapter(DatabaseAdapter):
     """Adapter for Microsoft SQL Server using pyodbc."""
 
+    @classmethod
+    def badge_label(cls) -> str:
+        return "MSSQL"
+
+    @classmethod
+    def url_schemes(cls) -> tuple[str, ...]:
+        return ("mssql", "sqlserver")
+
     @property
     def name(self) -> str:
         return "SQL Server"
@@ -37,6 +45,23 @@ class SQLServerAdapter(DatabaseAdapter):
     def supports_stored_procedures(self) -> bool:
         return True
 
+    def build_connection_string(self, config: ConnectionConfig) -> str:
+        return self._build_connection_string(config)
+
+    def get_auth_type(self, config: ConnectionConfig) -> "AuthType":
+        from ...config import AuthType
+
+        auth_type = config.get_option("auth_type", "sql")
+        try:
+            return AuthType(str(auth_type))
+        except ValueError:
+            return AuthType.SQL_SERVER
+
+    def apply_database_override(self, config: ConnectionConfig, database: str) -> ConnectionConfig:
+        from dataclasses import replace
+
+        return replace(config, database=database) if database else config
+
     @property
     def default_schema(self) -> str:
         return "dbo"
@@ -45,6 +70,50 @@ class SQLServerAdapter(DatabaseAdapter):
     def supports_sequences(self) -> bool:
         """SQL Server 2012+ supports sequences."""
         return True
+
+    @property
+    def driver_setup_kind(self) -> str | None:
+        return "odbc"
+
+    @classmethod
+    def docker_image_patterns(cls) -> tuple[str, ...]:
+        return ("mcr.microsoft.com/mssql", "mcr.microsoft.com/azure-sql-edge")
+
+    @classmethod
+    def docker_env_vars(cls) -> dict[str, tuple[str, ...]]:
+        return {
+            "user": (),
+            "password": ("SA_PASSWORD", "MSSQL_SA_PASSWORD"),
+            "database": (),
+        }
+
+    @classmethod
+    def docker_default_user(cls) -> str | None:
+        return "sa"
+
+    @classmethod
+    def docker_default_database(cls) -> str | None:
+        return "master"
+
+    def normalize_config(self, config: ConnectionConfig) -> ConnectionConfig:
+        auth_type = str(config.get_option("auth_type") or "sql")
+        config.set_option("auth_type", auth_type)
+
+        trusted_connection = config.get_option("trusted_connection")
+        if trusted_connection is None:
+            config.set_option("trusted_connection", auth_type == "windows")
+
+        if auth_type == "windows" and not config.get_option("trusted_connection") and config.username:
+            config.set_option("auth_type", "sql")
+            config.set_option("trusted_connection", False)
+
+        driver = config.get_option("driver")
+        if not driver:
+            from ...config import _get_default_driver
+
+            config.set_option("driver", _get_default_driver())
+
+        return config
 
     def _build_connection_string(self, config: ConnectionConfig) -> str:
         """Build ODBC connection string from config.
@@ -61,14 +130,19 @@ class SQLServerAdapter(DatabaseAdapter):
         if config.port and config.port != "1433":
             server_with_port = f"{config.server},{config.port}"
 
+        driver = config.get_option("driver")
+        if not driver:
+            from ...config import _get_default_driver
+
+            driver = _get_default_driver()
         base = (
-            f"DRIVER={{{config.driver}}};"
+            f"DRIVER={{{driver}}};"
             f"SERVER={server_with_port};"
             f"DATABASE={config.database or 'master'};"
             f"TrustServerCertificate=yes;"
         )
 
-        auth = config.get_auth_type()
+        auth = self.get_auth_type(config)
 
         if auth == AuthType.WINDOWS:
             return base + "Trusted_Connection=yes;"
@@ -93,10 +167,15 @@ class SQLServerAdapter(DatabaseAdapter):
         )
 
         installed = list(pyodbc.drivers())
-        if config.driver not in installed:
+        driver = config.get_option("driver")
+        if not driver:
+            from ...config import _get_default_driver
+
+            driver = _get_default_driver()
+        if driver not in installed:
             from ...db.exceptions import MissingODBCDriverError
 
-            raise MissingODBCDriverError(config.driver, installed)
+            raise MissingODBCDriverError(driver, installed)
 
         conn_str = self._build_connection_string(config)
         return pyodbc.connect(conn_str, timeout=10)

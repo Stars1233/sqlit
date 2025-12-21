@@ -17,6 +17,46 @@ class TursoAdapter(DatabaseAdapter):
     package for connections via HTTP/HTTPS URLs with optional token authentication.
     """
 
+    @classmethod
+    def badge_label(cls) -> str:
+        return "Turso"
+
+    @classmethod
+    def url_schemes(cls) -> tuple[str, ...]:
+        return ("libsql",)
+
+    @classmethod
+    def docker_image_patterns(cls) -> tuple[str, ...]:
+        return ("ghcr.io/tursodatabase/libsql-server", "tursodatabase/libsql-server")
+
+    @classmethod
+    def docker_env_vars(cls) -> dict[str, tuple[str, ...]]:
+        return {
+            "user": (),
+            "password": (),
+            "database": (),
+        }
+
+    @classmethod
+    def docker_default_user(cls) -> str | None:
+        return ""
+
+    @classmethod
+    def normalize_docker_connection(cls, config: ConnectionConfig) -> ConnectionConfig:
+        if config.port and not config.server.startswith(("http://", "https://", "libsql://")):
+            config.server = f"http://{config.server}:{config.port}"
+        config.port = ""
+        return config
+
+    def normalize_config(self, config: ConnectionConfig) -> ConnectionConfig:
+        if config.port:
+            if config.server.startswith(("http://", "https://", "libsql://")):
+                config.port = ""
+            elif ":" not in config.server:
+                config.server = f"{config.server}:{config.port}"
+                config.port = ""
+        return config
+
     @property
     def name(self) -> str:
         return "Turso"

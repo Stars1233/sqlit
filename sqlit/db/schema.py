@@ -405,6 +405,7 @@ TURSO_SCHEMA = ConnectionSchema(
     ),
     supports_ssh=False,
     requires_auth=False,  # Turso local servers don't require auth
+    default_port="8080",
 )
 
 

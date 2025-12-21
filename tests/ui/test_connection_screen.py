@@ -42,7 +42,7 @@ class TestConnectionScreen:
         assert action == "save"
         assert config.name == "my-sqlite"
         assert config.db_type == "sqlite"
-        assert config.file_path == str(db_path)
+        assert config.get_option("file_path") == str(db_path)
         assert original_name is None  # New connection has no original name
 
     @pytest.mark.asyncio
@@ -57,7 +57,7 @@ class TestConnectionScreen:
         original = ConnectionConfig(
             name="prod-db",
             db_type="sqlite",
-            file_path=str(old_db),
+            options={"file_path": str(old_db)},
         )
         app = ConnectionScreenTestApp(original, editing=True)
 
@@ -77,7 +77,7 @@ class TestConnectionScreen:
         assert action == "save"
         assert config.name == "new-prod-db"
         assert config.db_type == "sqlite"
-        assert config.file_path == str(new_db)
+        assert config.get_option("file_path") == str(new_db)
         assert original_name == "prod-db"  # Original name preserved for edit
 
     @pytest.mark.asyncio
@@ -162,7 +162,7 @@ class TestTabNavigation:
 
         The tab bar should NOT be included in this cycle.
         """
-        config = ConnectionConfig(name="", db_type="sqlite", file_path="")
+        config = ConnectionConfig(name="", db_type="sqlite", options={"file_path": ""})
         app = ConnectionScreenTestApp(config, editing=False)
 
         async with app.run_test(size=(100, 35)) as _pilot:
@@ -189,7 +189,7 @@ class TestTabNavigation:
     @pytest.mark.asyncio
     async def test_tab_key_cycles_through_sqlite_fields(self):
         """Pressing Tab should cycle through SQLite form fields correctly."""
-        config = ConnectionConfig(name="", db_type="sqlite", file_path="")
+        config = ConnectionConfig(name="", db_type="sqlite", options={"file_path": ""})
         app = ConnectionScreenTestApp(config, editing=False)
 
         async with app.run_test(size=(100, 35)) as pilot:
@@ -292,7 +292,7 @@ class TestEditConnectionNoDuplicates:
         original = ConnectionConfig(
             name="my-connection",
             db_type="sqlite",
-            file_path=str(db_path),
+            options={"file_path": str(db_path)},
         )
         app = ConnectionScreenTestApp(original, editing=True)
 
@@ -317,7 +317,7 @@ class TestEditConnectionNoDuplicates:
         original = ConnectionConfig(
             name="old-name",
             db_type="sqlite",
-            file_path=str(db_path),
+            options={"file_path": str(db_path)},
         )
         app = ConnectionScreenTestApp(original, editing=True)
 
@@ -370,7 +370,7 @@ class TestDuplicateConnection:
         template = ConnectionConfig(
             name="original (copy)",
             db_type="sqlite",
-            file_path=str(db_path),
+            options={"file_path": str(db_path)},
         )
         # When duplicating, editing=False since it's a new connection
         app = ConnectionScreenTestApp(template, editing=False)

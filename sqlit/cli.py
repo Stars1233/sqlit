@@ -387,11 +387,10 @@ def _build_temp_connection(args: argparse.Namespace) -> ConnectionConfig | None:
     """Build a temporary connection config from CLI args, if provided."""
     db_type = getattr(args, "db_type", None)
     file_path = getattr(args, "file_path", None)
-    if not db_type and file_path:
-        db_type = "sqlite"
-        setattr(args, "db_type", db_type)
     if not db_type:
-        if any(getattr(args, name, None) for name in ("file_path", "server", "host", "database")):
+        if file_path:
+            raise ValueError("--db-type is required when using --file-path")
+        if any(getattr(args, name, None) for name in ("server", "host", "database")):
             raise ValueError("--db-type is required for temporary connections")
         return None
 

@@ -13,6 +13,7 @@ from textual.worker import Worker
 from textual.widgets import OptionList
 from textual.widgets.option_list import Option
 
+from ...db.providers import get_connection_display_info
 from ...utils import fuzzy_match, highlight_matches
 from ...widgets import Dialog, FilterInput
 
@@ -27,6 +28,9 @@ class DockerConnectionResult:
 
     container: DetectedContainer
     action: str  # "connect" or "save"
+
+    def get_result_kind(self) -> str:
+        return "docker"
 
 
 class ConnectionPickerScreen(ModalScreen):
@@ -208,7 +212,7 @@ class ConnectionPickerScreen(ModalScreen):
             if matches or not pattern:
                 display = highlight_matches(conn.name, indices)
                 db_type = conn.db_type.upper() if conn.db_type else "DB"
-                info = conn.get_display_info()
+                info = get_connection_display_info(conn)
                 saved_options.append(
                     Option(f"{display} [{db_type}] [dim]({info})[/]", id=conn.name)
                 )

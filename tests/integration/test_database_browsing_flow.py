@@ -404,7 +404,7 @@ class TestMSSQLDatabaseBrowsing(BaseDatabaseBrowsingTest):
             database="",  # Empty to browse all databases
             username=self.USERNAME,
             password=self.PASSWORD,
-            auth_type="sql",
+            options={"auth_type": "sql"},
         )
 
     @pytest.fixture(autouse=True)

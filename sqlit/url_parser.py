@@ -9,29 +9,57 @@ Supports standard URL formats like:
 
 from __future__ import annotations
 
+from typing import Protocol
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .config import ConnectionConfig
-from .db.providers import get_default_port, get_display_name
+from .db.providers import (
+    get_connection_schema,
+    get_db_type_for_scheme,
+    get_display_name,
+    get_url_scheme_map,
+    normalize_connection_config,
+)
 
-# Map URL schemes to database types
-SCHEME_TO_DB_TYPE: dict[str, str] = {
-    "postgresql": "postgresql",
-    "postgres": "postgresql",
-    "mysql": "mysql",
-    "mariadb": "mariadb",
-    "mssql": "mssql",
-    "sqlserver": "mssql",
-    "sqlite": "sqlite",
-    "duckdb": "duckdb",
-    "cockroachdb": "cockroachdb",
-    "cockroach": "cockroachdb",
-    "oracle": "oracle",
-    "libsql": "turso",
-}
 
-# Database types that use file paths instead of server connections
-FILE_BASED_SCHEMES = {"sqlite", "duckdb"}
+class UrlParseStrategy(Protocol):
+    def parse(
+        self,
+        parsed: "urlparse",
+        db_type: str,
+        name: str,
+        original_url: str,
+        extra_options: dict[str, str],
+    ) -> ConnectionConfig:
+        """Parse a URL into a ConnectionConfig."""
+
+
+class ServerBasedUrlStrategy:
+    def parse(
+        self,
+        parsed: "urlparse",
+        db_type: str,
+        name: str,
+        original_url: str,
+        extra_options: dict[str, str],
+    ) -> ConnectionConfig:
+        return _parse_server_based_url(parsed, db_type, name, original_url, extra_options)
+
+
+class FileBasedUrlStrategy:
+    def parse(
+        self,
+        parsed: "urlparse",
+        db_type: str,
+        name: str,
+        original_url: str,
+        extra_options: dict[str, str],
+    ) -> ConnectionConfig:
+        return _parse_file_based_url(parsed, db_type, name, original_url, extra_options)
+
+
+FILE_BASED_STRATEGY = FileBasedUrlStrategy()
+SERVER_BASED_STRATEGY = ServerBasedUrlStrategy()
 
 
 def is_connection_url(arg: str) -> bool:
@@ -46,7 +74,7 @@ def is_connection_url(arg: str) -> bool:
     if "://" not in arg:
         return False
     scheme = arg.split("://")[0].lower()
-    return scheme in SCHEME_TO_DB_TYPE
+    return get_db_type_for_scheme(scheme) is not None
 
 
 def detect_db_type_from_scheme(scheme: str) -> str | None:
@@ -58,7 +86,7 @@ def detect_db_type_from_scheme(scheme: str) -> str | None:
     Returns:
         Database type string, or None if scheme is not recognized
     """
-    return SCHEME_TO_DB_TYPE.get(scheme.lower())
+    return get_db_type_for_scheme(scheme)
 
 
 def parse_connection_url(
@@ -82,7 +110,7 @@ def parse_connection_url(
 
     db_type = detect_db_type_from_scheme(parsed.scheme)
     if not db_type:
-        supported = ", ".join(sorted(set(SCHEME_TO_DB_TYPE.values())))
+        supported = ", ".join(sorted(set(get_url_scheme_map().values())))
         raise ValueError(
             f"Unsupported URL scheme: '{parsed.scheme}'. "
             f"Supported databases: {supported}"
@@ -98,12 +126,14 @@ def parse_connection_url(
     # Generate default name if not provided
     config_name = name or f"Temp {get_display_name(db_type)}"
 
-    # Handle file-based databases (SQLite, DuckDB)
-    if db_type in FILE_BASED_SCHEMES:
-        return _parse_file_based_url(parsed, db_type, config_name, url, extra_options)
+    schema = get_connection_schema(db_type)
+    strategy: UrlParseStrategy = SERVER_BASED_STRATEGY
+    if schema.is_file_based:
+        strategy = FILE_BASED_STRATEGY
 
-    # Handle server-based databases
-    return _parse_server_based_url(parsed, db_type, config_name, url, extra_options)
+    return normalize_connection_config(
+        strategy.parse(parsed, db_type, config_name, url, extra_options)
+    )
 
 
 def _parse_file_based_url(
@@ -138,7 +168,7 @@ def _parse_file_based_url(
     return ConnectionConfig(
         name=name,
         db_type=db_type,
-        file_path=file_path,
+        options={"file_path": file_path},
         connection_url=original_url,
         extra_options=extra_options,
     )

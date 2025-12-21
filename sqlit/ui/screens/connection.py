@@ -27,7 +27,7 @@ from textual.widgets import (
 )
 from textual.widgets.option_list import Option
 
-from dataclasses import replace
+from dataclasses import fields, replace
 
 from ...config import (
     ConnectionConfig,
@@ -331,8 +331,8 @@ class ConnectionScreen(ModalScreen):
         return [FieldGroup(name="connection", fields=definitions)]
 
     def _get_field_value(self, field_name: str) -> str:
-        if self.config and hasattr(self.config, field_name):
-            return getattr(self.config, field_name) or ""
+        if self.config:
+            return str(self.config.get_field_value(field_name, ""))
         return ""
 
     def _get_current_form_values(self) -> dict:
@@ -363,8 +363,7 @@ class ConnectionScreen(ModalScreen):
             initial_values = {}
             if self.config:
                 for attr in ["auth_type", "driver", "server", "port", "database", "username", "password", "file_path"]:
-                    if hasattr(self.config, attr):
-                        initial_values[attr] = getattr(self.config, attr) or ""
+                    initial_values[attr] = self.config.get_field_value(attr, "")
             initial_visible = field_def.visible_when(initial_values)
 
         hidden_class = "" if initial_visible else " hidden"
@@ -866,11 +865,11 @@ class ConnectionScreen(ModalScreen):
             print(f"[DEBUG] _update_ssh_tab_enabled: {elapsed:.1f}ms", file=sys.stderr)
             t1 = time.perf_counter()
 
-        self._update_mssql_driver_setup_visibility(self._current_db_type)
+        self._update_driver_setup_visibility(self._current_db_type)
 
         if debug:
             elapsed = (time.perf_counter() - t1) * 1000
-            print(f"[DEBUG] _update_mssql_driver_setup_visibility: {elapsed:.1f}ms", file=sys.stderr)
+            print(f"[DEBUG] _update_driver_setup_visibility: {elapsed:.1f}ms", file=sys.stderr)
             total = (time.perf_counter() - t0) * 1000
             print(f"[DEBUG] on_mount total: {total:.1f}ms", file=sys.stderr)
 
@@ -1122,7 +1121,7 @@ class ConnectionScreen(ModalScreen):
                 self._update_field_visibility()
                 self._focus_first_visible_field()
                 self._update_ssh_tab_enabled(db_type)
-                self._update_mssql_driver_setup_visibility(db_type)
+                self._update_driver_setup_visibility(db_type)
                 self._check_driver_availability(db_type)
             return
 
@@ -1232,12 +1231,13 @@ class ConnectionScreen(ModalScreen):
 
         return fields
 
-    def _update_mssql_driver_setup_visibility(self, db_type: DatabaseType) -> None:
+    def _update_driver_setup_visibility(self, db_type: DatabaseType) -> None:
         try:
             container = self.query_one("#mssql-driver-setup", Container)
         except Exception:
             return
-        if db_type.value == "mssql":
+        adapter = self._get_adapter_for_type(db_type)
+        if adapter.driver_setup_kind:
             container.remove_class("hidden")
         else:
             container.add_class("hidden")
@@ -1258,7 +1258,7 @@ class ConnectionScreen(ModalScreen):
         from ..screens import DriverSetupScreen, MessageScreen
 
         try:
-            get_adapter("mssql").ensure_driver_available()
+            self._get_adapter_for_type(self._current_db_type).ensure_driver_available()
         except MissingDriverError as e:
             self._prompt_install_missing_driver(e)
             return
@@ -1303,7 +1303,7 @@ class ConnectionScreen(ModalScreen):
             self._open_odbc_driver_setup()
 
     def action_open_odbc_setup(self) -> None:
-        if self._current_db_type.value != "mssql":
+        if self._get_adapter_for_type(self._current_db_type).driver_setup_kind != "odbc":
             return
         self._open_odbc_driver_setup()
 
@@ -1317,7 +1317,7 @@ class ConnectionScreen(ModalScreen):
         if self._missing_driver_error:
             self._prompt_install_missing_driver(self._missing_driver_error)
             return
-        if self._current_db_type.value == "mssql":
+        if self._get_adapter_for_type(self._current_db_type).driver_setup_kind == "odbc":
             self._open_odbc_driver_setup()
 
     def _clear_field_error(self, name: str) -> None:
@@ -1614,18 +1614,24 @@ class ConnectionScreen(ModalScreen):
                     pass
             return None
 
-        config_kwargs = {
+        config_kwargs: dict[str, Any] = {
             "name": name,
             "db_type": db_type.value,
         }
+        options: dict[str, Any] = {}
+        base_fields = {f.name for f in fields(ConnectionConfig)}
 
         for field_name, value in values.items():
             if not field_name.startswith("ssh_"):
-                config_kwargs[field_name] = value
+                if field_name in base_fields:
+                    config_kwargs[field_name] = value
+                else:
+                    options[field_name] = value
 
         if has_advanced_auth(db_type.value):
             auth_type = values.get("auth_type", "sql")
-            config_kwargs["trusted_connection"] = auth_type == "windows"
+            options["auth_type"] = auth_type
+            options["trusted_connection"] = auth_type == "windows"
 
         if supports_ssh(db_type.value):
             config_kwargs["ssh_enabled"] = values.get("ssh_enabled") == "enabled"
@@ -1635,6 +1641,8 @@ class ConnectionScreen(ModalScreen):
             config_kwargs["ssh_auth_type"] = values.get("ssh_auth_type", "key")
             config_kwargs["ssh_key_path"] = values.get("ssh_key_path", "")
             config_kwargs["ssh_password"] = values.get("ssh_password", "")
+
+        config_kwargs["options"] = options
 
         return ConnectionConfig(**config_kwargs)
 

@@ -20,7 +20,7 @@ from .config import (
     load_connections,
     save_connections,
 )
-from .db.providers import get_connection_schema, has_advanced_auth, is_file_based
+from .db.providers import get_adapter_class, get_connection_schema, has_advanced_auth, is_file_based
 from .services import ConnectionSession, QueryResult, QueryService
 from .services.credentials import (
     ALLOW_PLAINTEXT_CREDENTIALS_SETTING,
@@ -101,12 +101,16 @@ def cmd_connection_list(args: Any) -> int:
     for conn in connections:
         db_type_label = labels.get(conn.get_db_type(), conn.db_type)
         if is_file_based(conn.db_type):
-            conn_info = conn.file_path[:38] + ".." if len(conn.file_path) > 40 else conn.file_path
+            file_path = str(conn.get_option("file_path", ""))
+            conn_info = file_path[:38] + ".." if len(file_path) > 40 else file_path
             auth_label = "N/A"
         elif has_advanced_auth(conn.db_type):
             conn_info = f"{conn.server}@{conn.database}" if conn.database else conn.server
             conn_info = conn_info[:38] + ".." if len(conn_info) > 40 else conn_info
-            auth_label = AUTH_TYPE_LABELS.get(conn.get_auth_type(), conn.auth_type)
+            auth_value = str(conn.get_option("auth_type", ""))
+            adapter_class = get_adapter_class(conn.db_type)
+            auth_type = adapter_class().get_auth_type(conn)
+            auth_label = AUTH_TYPE_LABELS.get(auth_type, auth_value) if auth_type else auth_value
         else:
             # Server-based databases with simple auth
             conn_info = f"{conn.server}@{conn.database}" if conn.database else conn.server
@@ -226,8 +230,8 @@ def cmd_connection_edit(args: Any) -> int:
     if args.auth_type:
         try:
             auth_type = AuthType(args.auth_type)
-            conn.auth_type = auth_type.value
-            conn.trusted_connection = auth_type == AuthType.WINDOWS
+            conn.set_option("auth_type", auth_type.value)
+            conn.set_option("trusted_connection", auth_type == AuthType.WINDOWS)
         except ValueError:
             valid_types = ", ".join(t.value for t in AuthType)
             print(f"Error: Invalid auth type '{args.auth_type}'. Valid types: {valid_types}")
@@ -239,7 +243,7 @@ def cmd_connection_edit(args: Any) -> int:
 
     file_path = getattr(args, "file_path", None)
     if file_path is not None:
-        conn.file_path = file_path
+        conn.set_option("file_path", file_path)
 
     if (conn.password or conn.ssh_password) and not is_keyring_usable():
         if not _maybe_prompt_plaintext_credentials():
@@ -371,8 +375,9 @@ def cmd_query(
         print(f"Error: Connection '{args.connection}' not found.")
         return 1
 
-    if args.database and config.db_type == "mssql":
-        config = replace(config, database=args.database)
+    if args.database:
+        adapter_class = get_adapter_class(config.db_type)
+        config = adapter_class().apply_database_override(config, args.database)
 
     config = _prompt_for_password(config)
 

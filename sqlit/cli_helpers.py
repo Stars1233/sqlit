@@ -3,33 +3,24 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import fields
+from functools import lru_cache
 from typing import Any, Iterable
 
 from .config import ConnectionConfig
 from .db.schema import ConnectionSchema, FieldType
 
-CONNECTION_ARG_NAMES = {
-    "name",
-    "server",
-    "host",
-    "port",
-    "database",
-    "username",
-    "password",
-    "file_path",
-    "auth_type",
-    "supabase_region",
-    "supabase_project_id",
-    "ssh_enabled",
-    "ssh_host",
-    "ssh_port",
-    "ssh_username",
-    "ssh_auth_type",
-    "ssh_key_path",
-    "ssh_password",
-    "driver",
-    "oracle_role",
-}
+@lru_cache(maxsize=1)
+def _get_connection_arg_names() -> set[str]:
+    from .db.schema import get_all_schemas
+
+    names = {
+        field.name
+        for schema in get_all_schemas().values()
+        for field in schema.fields
+    }
+    names.add("host")
+    return names
 
 
 def add_schema_arguments(
@@ -85,6 +76,8 @@ def build_connection_config_from_args(
     strict: bool = True,
 ) -> ConnectionConfig:
     """Build a ConnectionConfig from CLI args based on a provider schema."""
+    from .db.providers import normalize_connection_config
+
     raw_values = _extract_raw_values(schema, args)
 
     missing = _find_missing_required_fields(schema, raw_values)
@@ -99,10 +92,12 @@ def build_connection_config_from_args(
             raise ValueError(f"Unexpected fields for {schema.display_name}: {extras_args}")
 
     config_name = name or default_name or f"Temp {schema.display_name}"
-    config_values = {
+    config_values: dict[str, Any] = {
         "name": config_name,
         "db_type": schema.db_type,
     }
+    options: dict[str, Any] = {}
+    base_fields = {f.name for f in fields(ConnectionConfig)}
 
     # Fields where None means "not set" vs "" means "explicitly empty"
     nullable_fields = {"password", "ssh_password"}
@@ -113,21 +108,27 @@ def build_connection_config_from_args(
             value = ""
         if field.name == "ssh_enabled":
             if isinstance(value, bool):
-                config_values[field.name] = value
+                normalized = value
             else:
-                config_values[field.name] = str(value).lower() == "enabled"
-        else:
+                normalized = str(value).lower() == "enabled"
+            config_values[field.name] = normalized
+            continue
+
+        if field.name in base_fields:
             config_values[field.name] = value
+        else:
+            options[field.name] = value
 
     if "port" in config_values and not config_values["port"]:
         config_values["port"] = schema.default_port or ""
 
     if schema.has_advanced_auth:
-        auth_type = config_values.get("auth_type") or "sql"
-        config_values["auth_type"] = auth_type
-        config_values["trusted_connection"] = auth_type == "windows"
+        auth_type = options.get("auth_type") or "sql"
+        options["auth_type"] = auth_type
+        options["trusted_connection"] = auth_type == "windows"
 
-    return ConnectionConfig(**config_values)
+    config_values["options"] = options
+    return normalize_connection_config(ConnectionConfig(**config_values))
 
 
 def _extract_raw_values(schema: ConnectionSchema, args: Any) -> dict[str, Any]:
@@ -158,7 +159,7 @@ def _find_missing_required_fields(schema: ConnectionSchema, raw_values: dict[str
 def _find_unexpected_fields(schema: ConnectionSchema, args: Any) -> list[str]:
     allowed = {field.name for field in schema.fields}
     extras: list[str] = []
-    for field in CONNECTION_ARG_NAMES:
+    for field in _get_connection_arg_names():
         if field in allowed or field == "name":
             continue
         value = getattr(args, field, None)

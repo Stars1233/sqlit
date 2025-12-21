@@ -10,9 +10,9 @@ eagerly (needed to create DatabaseType enum).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Mapping
 
 # Only import what's needed to create the DatabaseType enum
 from .db.providers import get_supported_db_types as _get_supported_db_types
@@ -160,12 +160,6 @@ class ConnectionConfig:
     database: str = ""
     username: str = ""
     password: str | None = None
-    # SQL Server specific fields
-    auth_type: str = "sql"
-    driver: str = field(default_factory=_get_default_driver)
-    trusted_connection: bool = False
-    # SQLite specific fields
-    file_path: str = ""
     # SSH tunnel fields
     ssh_enabled: bool = False
     ssh_host: str = ""
@@ -174,35 +168,55 @@ class ConnectionConfig:
     ssh_auth_type: str = "key"  # "key" or "password"
     ssh_password: str | None = None
     ssh_key_path: str = ""
-    # Supabase specific fields
-    supabase_region: str = ""
-    supabase_project_id: str = ""
-    # Oracle specific fields
-    oracle_role: str = "normal"  # "normal", "sysdba", "sysoper"
     # Source tracking (e.g., "docker" for auto-detected containers)
     source: str | None = None
     # Original connection URL if created from URL
     connection_url: str | None = None
     # Extra options from URL query parameters (e.g., sslmode=require)
     extra_options: dict[str, str] = field(default_factory=dict)
+    # Provider-specific options (auth_type, driver, file_path, etc.)
+    options: dict[str, Any] = field(default_factory=dict)
 
-    def __post_init__(self) -> None:
-        """Handle backwards compatibility with old configs."""
-        # Old configs without db_type are SQL Server
-        if not hasattr(self, "db_type") or not self.db_type:
-            self.db_type = "mssql"
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> ConnectionConfig:
+        """Create a ConnectionConfig from a dict, with legacy key support."""
+        payload = dict(data)
 
-        # Apply default port for server-based DBs if missing (lazy import)
-        if not getattr(self, "port", None):
-            from .db.providers import get_default_port
-            default_port = get_default_port(self.db_type)
-            if default_port:
-                self.port = default_port
+        if "host" in payload and "server" not in payload:
+            payload["server"] = payload.pop("host")
 
-        # Handle old SQL Server auth compatibility
-        if self.db_type == "mssql":
-            if self.auth_type == "windows" and not self.trusted_connection and self.username:
-                self.auth_type = "sql"
+        db_type = payload.get("db_type")
+        if not isinstance(db_type, str) or not db_type:
+            payload["db_type"] = "mssql"
+
+        raw_options = payload.pop("options", None)
+        options: dict[str, Any] = {}
+        if isinstance(raw_options, dict):
+            options.update(raw_options)
+
+        base_fields = {f.name for f in fields(cls)}
+        for key in list(payload.keys()):
+            if key in base_fields:
+                continue
+            if key not in options:
+                options[key] = payload.pop(key)
+            else:
+                payload.pop(key)
+
+        payload["options"] = options
+        return cls(**payload)
+
+    def get_option(self, name: str, default: Any | None = None) -> Any:
+        return self.options.get(name, default)
+
+    def set_option(self, name: str, value: Any) -> None:
+        self.options[name] = value
+
+    def get_field_value(self, name: str, default: Any = "") -> Any:
+        if name in self.__dataclass_fields__:
+            value = getattr(self, name)
+            return value if value is not None else default
+        return self.options.get(name, default)
 
     def get_db_type(self) -> DatabaseType:
         """Get the DatabaseType enum value."""
@@ -210,71 +224,6 @@ class ConnectionConfig:
             return DatabaseType(self.db_type)
         except ValueError:
             return DatabaseType.MSSQL  # type: ignore[attr-defined, no-any-return]
-
-    def get_auth_type(self) -> AuthType:
-        """Get the AuthType enum value."""
-        try:
-            return AuthType(self.auth_type)
-        except ValueError:
-            return AuthType.SQL_SERVER
-
-    def get_connection_string(self) -> str:
-        """Build the connection string for SQL Server.
-
-        .. deprecated::
-            This method is deprecated. Connection string building is now
-            handled internally by SQLServerAdapter._build_connection_string().
-            Use SQLServerAdapter.connect() directly instead.
-        """
-        import warnings
-
-        warnings.warn(
-            "ConnectionConfig.get_connection_string() is deprecated. "
-            "Connection string building is now handled internally by SQLServerAdapter.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
-        if self.db_type != "mssql":
-            raise ValueError("get_connection_string() is only for SQL Server connections")
-
-        server_with_port = self.server
-        if self.port and self.port != "1433":
-            server_with_port = f"{self.server},{self.port}"
-
-        base = (
-            f"DRIVER={{{self.driver}}};"
-            f"SERVER={server_with_port};"
-            f"DATABASE={self.database or 'master'};"
-            f"TrustServerCertificate=yes;"
-        )
-
-        auth = self.get_auth_type()
-
-        if auth == AuthType.WINDOWS:
-            return base + "Trusted_Connection=yes;"
-        elif auth == AuthType.SQL_SERVER:
-            return base + f"UID={self.username};PWD={self.password};"
-        elif auth == AuthType.AD_PASSWORD:
-            return base + f"Authentication=ActiveDirectoryPassword;" f"UID={self.username};PWD={self.password};"
-        elif auth == AuthType.AD_INTERACTIVE:
-            return base + f"Authentication=ActiveDirectoryInteractive;" f"UID={self.username};"
-        elif auth == AuthType.AD_INTEGRATED:
-            return base + "Authentication=ActiveDirectoryIntegrated;"
-
-        return base + "Trusted_Connection=yes;"
-
-    def get_display_info(self) -> str:
-        """Get a display string for the connection."""
-        from .db.providers import is_file_based
-        if is_file_based(self.db_type):
-            return self.file_path or self.name
-
-        if self.db_type == "supabase":
-            return f"{self.name} ({self.supabase_region})"
-
-        db_part = f"@{self.database}" if self.database else ""
-        return f"{self.name}{db_part}"
 
     def get_source_emoji(self) -> str:
         """Get emoji indicator for connection source (e.g., '🐳 ' for docker)."""
