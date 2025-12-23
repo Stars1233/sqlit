@@ -785,7 +785,10 @@ class SSMSTUI(
         try:
             self.theme = theme_name
         except Exception:
-            self.theme = DEFAULT_THEME
+            try:
+                self.theme = DEFAULT_THEME
+            except Exception:
+                self.theme = "sqlit"
 
     def _start_omarchy_watcher(self) -> None:
         """Start watching for Omarchy theme changes."""
