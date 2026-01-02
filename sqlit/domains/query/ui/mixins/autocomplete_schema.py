@@ -31,7 +31,20 @@ class AutocompleteSchemaMixin:
             return session.executor.submit(fn, *args, **kwargs).result()
         return fn(*args, **kwargs)
 
-    def _load_columns_for_table(self: AutocompleteMixinHost, table_name: str) -> None:
+    def _reconnect_for_autocomplete(self: AutocompleteMixinHost, target_db: str | None) -> bool:
+        session = getattr(self, "_session", None)
+        if session is None:
+            return False
+        try:
+            session.switch_database(target_db or "")
+            self.current_config = session.config
+            self.current_connection = session.connection
+            return True
+        except Exception as error:
+            self.log.error(f"Error reconnecting for autocomplete: {error}")
+            return False
+
+    def _load_columns_for_table(self: AutocompleteMixinHost, table_name: str, *, allow_retry: bool = True) -> None:
         """Lazy load columns for a specific table (async via worker)."""
         if not self.current_connection or not self.current_provider:
             return
@@ -68,7 +81,14 @@ class AutocompleteSchemaMixin:
                     )
                     column_names = [c.name for c in columns]
                 except Exception:
-                    column_names = []
+                    self.call_from_thread(
+                        self._on_autocomplete_columns_error,
+                        table_name,
+                        actual_table_name,
+                        database,
+                        allow_retry,
+                    )
+                    return
 
             self.call_from_thread(
                 self._on_autocomplete_columns_loaded,
@@ -98,6 +118,29 @@ class AutocompleteSchemaMixin:
                 self._show_autocomplete(suggestions, current_word)
             else:
                 self._hide_autocomplete()
+
+    def _on_autocomplete_columns_error(
+        self: AutocompleteMixinHost,
+        table_name: str,
+        actual_table_name: str,
+        database: str | None,
+        allow_retry: bool,
+    ) -> None:
+        """Handle column load error for autocomplete and retry once after reconnect."""
+        self._columns_loading.discard(table_name)
+
+        target_db = database
+        if not target_db and hasattr(self, "_get_effective_database"):
+            target_db = self._get_effective_database()
+
+        if allow_retry and target_db is not None:
+            if not self._reconnect_for_autocomplete(target_db):
+                self.log.error(f"Error reconnecting for columns on {actual_table_name}")
+                return
+            self._load_columns_for_table(table_name, allow_retry=False)
+            return
+
+        self.log.error(f"Error loading columns for {actual_table_name}")
 
     def _has_tables_needing_columns(self: AutocompleteMixinHost, text: str) -> bool:
         """Check if there are tables in the query that need column loading."""

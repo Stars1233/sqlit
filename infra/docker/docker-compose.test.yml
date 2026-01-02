@@ -7,7 +7,7 @@ services:
       MSSQL_SA_PASSWORD: "TestPassword123!"
       MSSQL_PID: "Developer"
     ports:
-      - "1434:1433"
+      - "${MSSQL_PORT:-1434}:1433"
     healthcheck:
       test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "TestPassword123!" -C -Q "SELECT 1" || exit 1
       interval: 10s
@@ -22,7 +22,7 @@ services:
       POSTGRES_PASSWORD: "TestPassword123!"
       POSTGRES_DB: "test_sqlit"
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U testuser -d test_sqlit"]
       interval: 5s
@@ -41,7 +41,7 @@ services:
       MYSQL_PASSWORD: "TestPassword123!"
       MYSQL_DATABASE: "test_sqlit"
     ports:
-      - "3306:3306"
+      - "${MYSQL_PORT:-3306}:3306"
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "testuser", "-pTestPassword123!"]
       interval: 5s
@@ -70,13 +70,68 @@ services:
       APP_USER: "testuser"
       APP_USER_PASSWORD: "TestPassword123!"
     ports:
-      - "1521:1521"
+      - "${ORACLE_PORT:-1521}:1521"
     healthcheck:
       test: ["CMD", "healthcheck.sh"]
       interval: 10s
       timeout: 5s
       retries: 20
       start_period: 60s
+
+  oracle11g:
+    image: wnameless/oracle-xe-11g
+    container_name: sqlit-test-oracle11g
+    environment:
+      ORACLE_ALLOW_REMOTE: "true"
+    ports:
+      - "1522:1521"
+    profiles:
+      - enterprise
+
+  db2:
+    image: icr.io/db2_community/db2:latest
+    container_name: sqlit-test-db2
+    privileged: true
+    environment:
+      LICENSE: "accept"
+      DB2INST1_PASSWORD: "TestPassword123!"
+      DBNAME: "testdb"
+    ports:
+      - "50000:50000"
+    profiles:
+      - enterprise
+
+  trino:
+    image: trinodb/trino:latest
+    container_name: sqlit-test-trino
+    ports:
+      - "8082:8080"
+    volumes:
+      - ../../tests/fixtures/trino/catalog:/etc/trino/catalog
+    profiles:
+      - enterprise
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/info"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  presto:
+    image: prestodb/presto:latest
+    container_name: sqlit-test-presto
+    ports:
+      - "8083:8080"
+    volumes:
+      - ../../tests/fixtures/presto/catalog:/etc/presto/catalog
+    profiles:
+      - enterprise
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/info"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   mariadb:
     image: mariadb:11
@@ -87,7 +142,7 @@ services:
       MARIADB_PASSWORD: "TestPassword123!"
       MARIADB_DATABASE: "test_sqlit"
     ports:
-      - "3307:3306"
+      - "${MARIADB_PORT:-3307}:3306"
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s

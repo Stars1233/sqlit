@@ -35,10 +35,30 @@ class TreeSchemaMixin:
                 db_arg_resolver = None
             else:
                 db_arg_resolver = cast(DbArgResolver, db_arg_resolver)
+            reconnect = None
+            if hasattr(self, "_session"):
+                def reconnect(database: str | None) -> bool:
+                    session = getattr(self, "_session", None)
+                    if session is None:
+                        return False
+                    target_db = database
+                    if not target_db and hasattr(self, "_get_effective_database"):
+                        target_db = self._get_effective_database()
+                    if target_db is None:
+                        target_db = ""
+                    try:
+                        session.switch_database(target_db)
+                        self.current_config = session.config
+                        self.current_connection = session.connection
+                        return True
+                    except Exception:
+                        return False
+
             self._schema_service = ExplorerSchemaService(
                 session=self._session,
                 object_cache=self._get_object_cache(),
                 db_arg_resolver=db_arg_resolver,
+                reconnect=reconnect,
             )
             self._schema_service_session = self._session
         return self._schema_service

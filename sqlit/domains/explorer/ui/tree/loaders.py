@@ -19,7 +19,7 @@ from sqlit.domains.explorer.domain.tree_nodes import (
 )
 from sqlit.shared.ui.protocols import TreeMixinHost
 
-from . import db_switching, expansion_state, schema_render
+from . import expansion_state, schema_render
 
 
 def ensure_loading_nodes(host: TreeMixinHost) -> set[str]:
@@ -111,10 +111,7 @@ def load_folder_async(host: TreeMixinHost, node: Any, data: FolderNode) -> None:
 
             host.call_from_thread(on_folder_loaded, host, node, db_name, folder_type, items)
         except Exception as error:
-            if db_name:
-                host.call_from_thread(fallback_reconnect_and_retry, host, node, data, db_name, error)
-            else:
-                host.call_from_thread(on_tree_load_error, host, node, f"Error loading: {error}")
+            host.call_from_thread(on_tree_load_error, host, node, f"Error loading: {error}")
 
     host.run_worker(work, name=f"load-folder-{folder_type}", thread=True, exclusive=False)
 
@@ -161,26 +158,3 @@ def on_tree_load_error(host: TreeMixinHost, node: Any, error_message: str) -> No
     """Handle tree load error on main thread."""
     clear_loading_state(host, node)
     host.notify(escape_markup(error_message), severity="error")
-
-
-def fallback_reconnect_and_retry(
-    host: TreeMixinHost,
-    node: Any,
-    data: FolderNode,
-    db_name: str,
-    original_error: Exception,
-) -> None:
-    """Try reconnecting to database and retry loading. Show original error if this also fails."""
-    clear_loading_state(host, node)
-
-    try:
-        db_switching.reconnect_to_database(host, db_name)
-    except Exception:
-        host.notify(escape_markup(f"Error loading: {original_error}"), severity="error")
-        return
-
-    node_path = expansion_state.get_node_path(host, node)
-    loading_nodes = ensure_loading_nodes(host)
-    loading_nodes.add(node_path)
-    add_loading_placeholder(host, node)
-    load_folder_async(host, node, data)
