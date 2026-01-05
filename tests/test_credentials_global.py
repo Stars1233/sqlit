@@ -39,8 +39,15 @@ class TestGlobalCredentialsService:
 
     @patch("sqlit.domains.connections.app.credentials.KeyringCredentialsService")
     @patch("sqlit.domains.connections.app.credentials.is_keyring_usable", return_value=True)
-    def test_default_service_is_keyring(self, _mock_usable: MagicMock, mock_keyring_class: MagicMock) -> None:
-        """Test that default service is keyring-based."""
+    @patch("sqlit.domains.shell.store.settings.SettingsStore.get_instance")
+    def test_default_service_is_keyring(
+        self, mock_store_get: MagicMock, _mock_usable: MagicMock, mock_keyring_class: MagicMock
+    ) -> None:
+        """Test that default service is keyring-based when plaintext not enabled."""
+        mock_store = MagicMock()
+        mock_store.load_all.return_value = {}  # No plaintext setting
+        mock_store_get.return_value = mock_store
+
         mock_instance = MagicMock()
         mock_keyring_class.return_value = mock_instance
 
@@ -74,6 +81,20 @@ class TestGlobalCredentialsService:
         mock_store_get.return_value = mock_store
         reset_credentials_service()
         service = get_credentials_service()
+        assert isinstance(service, PlaintextFileCredentialsService)
+
+    @patch("sqlit.domains.connections.app.credentials.is_keyring_usable", return_value=True)
+    @patch("sqlit.domains.shell.store.settings.SettingsStore.get_instance")
+    def test_plaintext_takes_priority_over_keyring(
+        self, mock_store_get: MagicMock, _mock_usable: MagicMock
+    ) -> None:
+        """Test that plaintext is used when enabled, even if keyring is available."""
+        mock_store = MagicMock()
+        mock_store.load_all.return_value = {"allow_plaintext_credentials": True}
+        mock_store_get.return_value = mock_store
+        reset_credentials_service()
+        service = get_credentials_service()
+        # Should use plaintext even though keyring is usable
         assert isinstance(service, PlaintextFileCredentialsService)
 
 
