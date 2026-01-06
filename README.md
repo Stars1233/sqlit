@@ -112,6 +112,9 @@ pip install sqlit-tui
 
 # Arch Linux (AUR)
 yay -S sqlit
+
+# Nix (flake)
+nix run github:Maxteabag/sqlit
 ```
 
 ## Usage
