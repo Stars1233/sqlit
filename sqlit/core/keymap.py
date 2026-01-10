@@ -376,8 +376,6 @@ class DefaultKeymapProvider(KeymapProvider):
             ActionKeyDef("z", "toggle_result_section", "results"),
             ActionKeyDef("escape", "results_filter_close", "results_filter"),
             ActionKeyDef("enter", "results_filter_accept", "results_filter"),
-            ActionKeyDef("n", "results_filter_next", "results_filter"),
-            ActionKeyDef("N", "results_filter_prev", "results_filter"),
             # Value view
             ActionKeyDef("q", "close_value_view", "value_view"),
             ActionKeyDef("escape", "close_value_view", "value_view"),

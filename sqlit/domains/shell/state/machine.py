@@ -252,7 +252,6 @@ class UIStateMachine:
         lines.append(binding("<enter>", "Apply filter"))
         lines.append(binding("<esc>", "Close filter"))
         lines.append(binding("~prefix", "Fuzzy match mode"))
-        lines.append(binding("n/N", "Next/prev match (Results)"))
         lines.append("")
 
         # ═══════════════════════════════════════════════════════════════════
