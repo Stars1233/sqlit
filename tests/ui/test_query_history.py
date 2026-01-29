@@ -7,6 +7,7 @@ import pytest
 from textual.widgets import OptionList
 
 from sqlit.domains.query.store.history import QueryHistoryEntry
+from sqlit.domains.query.store.memory import InMemoryHistoryStore
 from sqlit.domains.query.ui.screens.query_history import QueryHistoryScreen
 from sqlit.domains.shell.app.main import SSMSTUI
 
@@ -181,6 +182,34 @@ class TestQueryHistorySavePolicy:
 
         async with app.run_test(size=(100, 35)) as pilot:
             app.current_config = unsaved_conn
+            app._save_query_history(unsaved_conn, "SELECT 1")
+
+            app.action_show_history()
+            await pilot.pause(0.2)
+
+            screen = next(
+                (s for s in app.screen_stack if isinstance(s, QueryHistoryScreen)),
+                None,
+            )
+            assert screen is not None, "History screen should be present"
+
+            option_list = screen.query_one("#history-list", OptionList)
+            assert option_list.option_count == 1
+
+    @pytest.mark.asyncio
+    async def test_show_history_for_unsaved_connection_with_duplicates(self) -> None:
+        unsaved_conn = create_test_connection("temp-db", "sqlite")
+        history_store = MockHistoryStore()
+        services = build_test_services(
+            connection_store=MockConnectionStore([]),
+            settings_store=MockSettingsStore({"theme": "tokyo-night"}),
+            history_store=history_store,
+        )
+        app = SSMSTUI(services=services)
+
+        async with app.run_test(size=(100, 35)) as pilot:
+            app.current_config = unsaved_conn
+            app._save_query_history(unsaved_conn, "SELECT 1")
             app._save_query_history(unsaved_conn, "SELECT 1")
 
             app.action_show_history()
