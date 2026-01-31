@@ -48,6 +48,8 @@ class MockHost(QueryExecutionMixin):
         self.query_executing = False
         self._query_worker = None
         self._query_spinner = None
+        self.services = MagicMock()
+        self.services.runtime.query_alert_mode = 0
 
     def _start_query_spinner(self) -> None:
         self.query_executing = True

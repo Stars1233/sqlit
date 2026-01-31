@@ -52,7 +52,7 @@ class QueryExecutionMixin(ProcessWorkerLifecycleMixin):
             self.notify("Connect to a server to execute queries", severity="warning")
             return
 
-        query = self.query_input.text.strip()
+        query = self._get_query_to_execute()
 
         if not query:
             self.notify("No query to execute", severity="warning")
@@ -113,13 +113,36 @@ class QueryExecutionMixin(ProcessWorkerLifecycleMixin):
 
         self._maybe_confirm_query(statement, _proceed)
 
+    def _get_query_to_execute(self: QueryMixinHost) -> str:
+        """Return selected text if present, otherwise the full query."""
+        selection = self.query_input.selection
+        if selection.start != selection.end:
+            from sqlit.domains.query.editing import get_selection_text
+
+            start = selection.start
+            end = selection.end
+            if start > end:
+                start, end = end, start
+
+            selected_sql = get_selection_text(
+                self.query_input.text,
+                start[0],
+                start[1],
+                end[0],
+                end[1],
+            )
+            if selected_sql and selected_sql.strip():
+                return selected_sql.strip()
+
+        return self.query_input.text.strip()
+
     def _execute_query_common(self: QueryMixinHost, keep_insert_mode: bool) -> None:
         """Common query execution logic."""
         if self.current_connection is None or self.current_provider is None:
             self.notify("Connect to a server to execute queries", severity="warning")
             return
 
-        query = self.query_input.text.strip()
+        query = self._get_query_to_execute()
 
         if not query:
             self.notify("No query to execute", severity="warning")
@@ -171,13 +194,6 @@ class QueryExecutionMixin(ProcessWorkerLifecycleMixin):
         elif severity == AlertSeverity.WRITE:
             title = "Confirm write query"
 
-        description = None
-        snippet = query.strip().splitlines()[0] if query.strip() else ""
-        if snippet:
-            if len(snippet) > 120:
-                snippet = snippet[:117] + "..."
-            description = snippet
-
         def _on_result(confirmed: bool | None) -> None:
             if confirmed:
                 proceed()
@@ -188,7 +204,7 @@ class QueryExecutionMixin(ProcessWorkerLifecycleMixin):
             )
 
         self.push_screen(
-            ConfirmScreen(title, description, yes_label="Run", no_label="Cancel"),
+            ConfirmScreen(title, query.strip(), yes_label="Yes", no_label="No"),
             _on_result,
         )
 

@@ -28,12 +28,16 @@ class ConfirmScreen(ModalScreen):
     }
 
     #confirm-dialog {
-        width: 36;
+        width: auto;
+        min-width: 36;
+        max-width: 80%;
     }
 
     #confirm-description {
         margin-bottom: 1;
         color: $text-muted;
+        max-height: 20;
+        overflow-y: auto;
     }
 
     #confirm-list {
