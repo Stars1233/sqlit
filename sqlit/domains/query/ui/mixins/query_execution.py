@@ -171,6 +171,7 @@ class QueryExecutionMixin(ProcessWorkerLifecycleMixin):
             format_alert_mode,
             should_confirm,
         )
+        from sqlit.domains.query.app.multi_statement import get_executable_sql
         from sqlit.shared.ui.screens.confirm import ConfirmScreen
 
         raw_mode = getattr(self.services.runtime, "query_alert_mode", 0) or 0
@@ -183,7 +184,14 @@ class QueryExecutionMixin(ProcessWorkerLifecycleMixin):
             proceed()
             return
 
-        severity = classify_query_alert(query)
+        # Get the SQL that will actually execute (without comment-only statements)
+        executable_sql = get_executable_sql(query)
+        if not executable_sql:
+            # Nothing to execute after filtering comments
+            proceed()
+            return
+
+        severity = classify_query_alert(executable_sql)
         if severity == AlertSeverity.NONE or not should_confirm(mode, severity):
             proceed()
             return
@@ -204,7 +212,7 @@ class QueryExecutionMixin(ProcessWorkerLifecycleMixin):
             )
 
         self.push_screen(
-            ConfirmScreen(title, query.strip(), yes_label="Yes", no_label="No"),
+            ConfirmScreen(title, executable_sql, yes_label="Yes", no_label="No"),
             _on_result,
         )
 
@@ -402,17 +410,20 @@ class QueryExecutionMixin(ProcessWorkerLifecycleMixin):
 
         # Use TransactionExecutor for transaction-aware query execution
         executor = self._get_transaction_executor(config, provider)
-        # Check if this is a multi-statement query
+        # Check if this is a multi-statement query (after filtering comment-only statements)
+        from sqlit.domains.query.editing.comments import is_comment_only_statement
+
         statements = split_statements(query)
-        is_multi_statement = len(statements) > 1
+        executable_statements = [s for s in statements if not is_comment_only_statement(s)]
+        is_multi_statement = len(executable_statements) > 1
 
         try:
             start_time = time.perf_counter()
             max_rows = self.services.runtime.max_rows or MAX_FETCH_ROWS
 
             use_process_worker = self._use_process_worker(provider)
-            if use_process_worker and statements:
-                statement = statements[0].strip()
+            if use_process_worker and executable_statements:
+                statement = executable_statements[0].strip()
                 if self.in_transaction or is_transaction_start(statement) or is_transaction_end(statement):
                     use_process_worker = False
 

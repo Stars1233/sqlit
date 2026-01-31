@@ -257,17 +257,26 @@ def find_statement_at_cursor(sql: str, row: int, col: int) -> tuple[str, int, in
     return ranges[0] if ranges else None
 
 
-def _is_comment_only(statement: str) -> bool:
-    """Check if a statement contains only comments (no actual SQL).
+def get_executable_sql(sql: str) -> str:
+    """Get the SQL that will actually be executed.
 
-    A statement is comment-only if all non-empty lines start with --.
+    Filters out comment-only statements and returns the remaining SQL
+    joined with semicolons. This should be used for display in confirm
+    dialogs to show exactly what will execute.
+
+    Args:
+        sql: Raw SQL that may contain comment-only statements.
+
+    Returns:
+        SQL string with comment-only statements removed.
     """
-    lines = statement.strip().split("\n")
-    for line in lines:
-        stripped = line.strip()
-        if stripped and not stripped.startswith("--"):
-            return False
-    return True
+    from sqlit.domains.query.editing.comments import is_comment_only_statement
+
+    statements = split_statements(sql)
+    executable = [s for s in statements if not is_comment_only_statement(s)]
+    if not executable:
+        return ""
+    return "; ".join(executable)
 
 
 def split_statements(sql: str) -> list[str]:
@@ -413,11 +422,13 @@ class MultiStatementExecutor:
         Returns:
             MultiStatementResult containing results from all executed statements.
         """
+        from sqlit.domains.query.editing.comments import is_comment_only_statement
+
         statements = split_statements(sql)
 
         # Filter out comment-only statements - they cause "empty query" errors
         # in some database drivers that strip comments before execution
-        statements = [s for s in statements if not _is_comment_only(s)]
+        statements = [s for s in statements if not is_comment_only_statement(s)]
 
         if not statements:
             return MultiStatementResult(results=[], completed=True, error_index=None)

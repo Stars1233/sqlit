@@ -274,10 +274,11 @@ class TransactionExecutor:
         Raises:
             Exception: If any statement fails (after rollback).
         """
+        from sqlit.domains.query.editing.comments import is_comment_only_statement
+
         from .multi_statement import (
             MultiStatementResult,
             StatementResult,
-            _is_comment_only,
             normalize_for_execution,
             split_statements,
         )
@@ -287,7 +288,7 @@ class TransactionExecutor:
         statements = split_statements(sql)
 
         # Filter out comment-only statements
-        statements = [s for s in statements if not _is_comment_only(s)]
+        statements = [s for s in statements if not is_comment_only_statement(s)]
 
         # Create a dedicated connection for this atomic operation
         conn = self.provider.connection_factory.connect(self.config)

@@ -72,20 +72,25 @@ class KeywordQueryAnalyzer:
         we check the last statement to determine if results should be returned.
         Uses the same splitting logic as multi_statement.split_statements.
         """
+        from sqlit.domains.query.editing.comments import (
+            is_comment_line,
+            is_comment_only_statement,
+        )
+
         from .multi_statement import split_statements
 
         statements = split_statements(query)
         if not statements:
             return QueryKind.NON_QUERY
 
-        # Filter out comment-only statements (lines starting with --)
-        # and find the last actual SQL statement
+        # Filter out comment-only statements and find the last actual SQL statement
         for stmt in reversed(statements):
-            # Skip comment-only lines
+            if is_comment_only_statement(stmt):
+                continue
+            # Found a statement with actual SQL - get first non-comment line
             lines = [line.strip() for line in stmt.split("\n") if line.strip()]
-            non_comment_lines = [line for line in lines if not line.startswith("--")]
+            non_comment_lines = [line for line in lines if not is_comment_line(line)]
             if non_comment_lines:
-                # Found a statement with actual SQL
                 first_line = non_comment_lines[0].upper()
                 first_word = first_line.split()[0] if first_line else ""
                 return QueryKind.RETURNS_ROWS if first_word in SELECT_KEYWORDS else QueryKind.NON_QUERY

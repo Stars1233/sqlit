@@ -46,8 +46,6 @@ _SINGLE_QUOTE_RE = re.compile(r"'[^']*'")
 _DOUBLE_QUOTE_RE = re.compile(r'"[^"]*"')
 _BACKTICK_RE = re.compile(r"`[^`]*`")
 _BRACKET_RE = re.compile(r"\[[^\]]*]")
-_LINE_COMMENT_RE = re.compile(r"--[^\n]*")
-_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 
 
 def parse_alert_mode(value: str | int | None) -> AlertMode | None:
@@ -113,8 +111,9 @@ def _classify_statement(statement: str) -> AlertSeverity:
 
 def _strip_comments_and_literals(sql: str) -> str:
     """Remove comments and quoted literals/identifiers for keyword scanning."""
-    cleaned = _LINE_COMMENT_RE.sub("", sql)
-    cleaned = _BLOCK_COMMENT_RE.sub("", cleaned)
+    from sqlit.domains.query.editing.comments import strip_all_comments
+
+    cleaned = strip_all_comments(sql)
     cleaned = _SINGLE_QUOTE_RE.sub("''", cleaned)
     cleaned = _DOUBLE_QUOTE_RE.sub('""', cleaned)
     cleaned = _BACKTICK_RE.sub("``", cleaned)
