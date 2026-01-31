@@ -79,7 +79,7 @@ class SnowflakeAdapter(CursorBasedAdapter):
         }
 
         # Additional args from our schema:
-        # warehouse, schema, role.
+        # warehouse, schema, role, authenticator.
         extras = config.options
         if "warehouse" in extras:
             connect_args["warehouse"] = extras["warehouse"]
@@ -87,6 +87,19 @@ class SnowflakeAdapter(CursorBasedAdapter):
             connect_args["schema"] = extras["schema"]
         if "role" in extras:
             connect_args["role"] = extras["role"]
+        # Authentication options
+        authenticator = extras.get("authenticator", "default")
+        if authenticator and authenticator != "default":
+            connect_args["authenticator"] = authenticator
+        if "private_key_file" in extras:
+            connect_args["private_key_file"] = extras["private_key_file"]
+        if "private_key_file_pwd" in extras:
+            connect_args["private_key_file_pwd"] = extras["private_key_file_pwd"]
+        if "oauth_token" in extras:
+            connect_args["token"] = extras["oauth_token"]
+
+        # Pass through any extra_options to the driver
+        connect_args.update(config.extra_options)
 
         return sf.connect(**connect_args)
 

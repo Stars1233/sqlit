@@ -180,6 +180,9 @@ class SQLServerAdapter(DatabaseAdapter):
         )
 
         conn_str = self._build_connection_string(config)
+        # Append extra_options to connection string
+        for key, value in config.extra_options.items():
+            conn_str += f"{key}={value};"
         conn = mssql_python.connect(conn_str)
         # Enable autocommit to allow DDL statements like CREATE DATABASE
         conn.autocommit = True

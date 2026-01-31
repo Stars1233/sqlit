@@ -110,6 +110,7 @@ class MySQLAdapter(MySQLBaseAdapter):
             ssl_params["check_hostname"] = tls_mode_verifies_hostname(tls_mode)
             connect_args["ssl"] = ssl_params
 
+        connect_args.update(config.extra_options)
         conn = pymysql.connect(**connect_args)
 
         # Auto-sync charset with server to handle legacy encodings (e.g., TIS-620, Latin1).

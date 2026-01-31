@@ -101,6 +101,7 @@ class OracleAdapter(DatabaseAdapter):
         if mode is not None:
             connect_kwargs["mode"] = mode
 
+        connect_kwargs.update(config.extra_options)
         return oracledb.connect(**connect_kwargs)
 
     def get_databases(self, conn: Any) -> list[str]:

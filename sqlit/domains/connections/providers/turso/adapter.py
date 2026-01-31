@@ -96,7 +96,9 @@ class TursoAdapter(DatabaseAdapter):
             url = f"https://{url}"
 
         auth_token = endpoint.password if endpoint.password else ""
-        return libsql.connect(url, auth_token=auth_token)
+        connect_args: dict[str, Any] = {"auth_token": auth_token}
+        connect_args.update(config.extra_options)
+        return libsql.connect(url, **connect_args)
 
     def get_databases(self, conn: Any) -> list[str]:
         """Turso doesn't support multiple databases - return empty list."""

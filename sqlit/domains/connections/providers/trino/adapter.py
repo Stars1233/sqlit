@@ -106,6 +106,7 @@ class TrinoAdapter(CursorBasedAdapter):
                 raise ValueError("Trino password authentication requires trino.auth.BasicAuthentication") from exc
             connect_args["auth"] = BasicAuthentication(endpoint.username, endpoint.password)
 
+        connect_args.update(config.extra_options)
         return trino_dbapi.connect(**connect_args)
 
     def get_databases(self, conn: Any) -> list[str]:

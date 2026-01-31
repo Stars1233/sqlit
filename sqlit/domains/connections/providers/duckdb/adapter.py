@@ -83,7 +83,9 @@ class DuckDBAdapter(DatabaseAdapter):
             raise ValueError("DuckDB connections require a file endpoint.")
         file_path = resolve_file_path(str(file_endpoint.path))
         duckdb_any: Any = duckdb
-        return duckdb_any.connect(str(file_path))
+        connect_args: dict[str, Any] = {}
+        connect_args.update(config.extra_options)
+        return duckdb_any.connect(str(file_path), **connect_args)
 
     def get_databases(self, conn: Any) -> list[str]:
         """DuckDB doesn't support multiple databases - return empty list."""

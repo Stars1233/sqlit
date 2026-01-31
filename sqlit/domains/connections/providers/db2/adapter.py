@@ -81,7 +81,9 @@ class Db2Adapter(CursorBasedAdapter):
             f"UID={endpoint.username};"
             f"PWD={endpoint.password};"
         )
-        return ibm_db_dbi.connect(conn_str, "", "")
+        connect_args: dict[str, Any] = {}
+        connect_args.update(config.extra_options)
+        return ibm_db_dbi.connect(conn_str, "", "", **connect_args)
 
     def get_databases(self, conn: Any) -> list[str]:
         return []

@@ -125,6 +125,7 @@ class RedshiftAdapter(CursorBasedAdapter):
             if tls_key:
                 connect_args["sslkey"] = tls_key
 
+        connect_args.update(config.extra_options)
         conn = redshift_connector.connect(**connect_args)
         conn.autocommit = True
         return conn

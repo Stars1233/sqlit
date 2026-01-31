@@ -82,6 +82,7 @@ class HanaAdapter(CursorBasedAdapter):
         if schema:
             connect_args["currentSchema"] = schema
 
+        connect_args.update(config.extra_options)
         return hdbcli.connect(**connect_args)
 
     def get_databases(self, conn: Any) -> list[str]:

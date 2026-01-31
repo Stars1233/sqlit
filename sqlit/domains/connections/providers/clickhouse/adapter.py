@@ -141,6 +141,7 @@ class ClickHouseAdapter(DatabaseAdapter):
             if tls_mode != TLS_MODE_DEFAULT:
                 connect_args["verify"] = tls_mode != TLS_MODE_REQUIRE
 
+        connect_args.update(config.extra_options)
         client = clickhouse_connect.get_client(**connect_args)
         return client
 

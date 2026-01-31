@@ -106,6 +106,7 @@ class PrestoAdapter(CursorBasedAdapter):
                 raise ValueError("Presto password authentication requires prestodb.auth.BasicAuthentication") from exc
             connect_args["auth"] = BasicAuthentication(endpoint.username, endpoint.password)
 
+        connect_args.update(config.extra_options)
         return prestodb_dbapi.connect(**connect_args)
 
     def get_databases(self, conn: Any) -> list[str]:

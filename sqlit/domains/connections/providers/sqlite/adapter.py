@@ -43,7 +43,9 @@ class SQLiteAdapter(DatabaseAdapter):
         file_path = resolve_file_path(str(file_endpoint.path))
         # check_same_thread=False allows connection to be used from background threads
         # (for async query execution). SQLite serializes access internally.
-        conn = sqlite3.connect(file_path, check_same_thread=False)
+        connect_args: dict[str, Any] = {"check_same_thread": False}
+        connect_args.update(config.extra_options)
+        conn = sqlite3.connect(file_path, **connect_args)
         conn.row_factory = sqlite3.Row
         return conn
 

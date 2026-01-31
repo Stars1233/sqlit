@@ -72,13 +72,15 @@ class FirebirdAdapter(CursorBasedAdapter):
         endpoint = config.tcp_endpoint
         if endpoint is None:
             raise ValueError("Firebird connections require a TCP-style endpoint.")
-        conn = firebirdsql.connect(
-            host=endpoint.host or "localhost",
-            port=int(endpoint.port) if endpoint.port else 3050,
-            database=endpoint.database or "security.db",
-            user=endpoint.username,
-            password=endpoint.password,
-        )
+        connect_args: dict[str, Any] = {
+            "host": endpoint.host or "localhost",
+            "port": int(endpoint.port) if endpoint.port else 3050,
+            "database": endpoint.database or "security.db",
+            "user": endpoint.username,
+            "password": endpoint.password,
+        }
+        connect_args.update(config.extra_options)
+        conn = firebirdsql.connect(**connect_args)
         return conn
 
     def get_databases(self, conn: Any) -> list[str]:

@@ -130,6 +130,7 @@ class FlightSQLAdapter(DatabaseAdapter):
         if use_tls and config.get_option("flight_skip_verify", "false") == "true":
             db_kwargs["adbc.flight.sql.client_option.tls_skip_verify"] = "true"
 
+        db_kwargs.update(config.extra_options)
         conn = flight_sql.connect(uri, db_kwargs=db_kwargs)
 
         # Store the catalog/database for later use

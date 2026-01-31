@@ -85,6 +85,7 @@ class TeradataAdapter(CursorBasedAdapter):
         if port:
             connect_args["dbs_port"] = port
 
+        connect_args.update(config.extra_options)
         return teradatasql.connect(**connect_args)
 
     def get_databases(self, conn: Any) -> list[str]:

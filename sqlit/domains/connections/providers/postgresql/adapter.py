@@ -74,6 +74,7 @@ class PostgreSQLAdapter(PostgresBaseAdapter):
             if tls_key_password:
                 connect_args["sslpassword"] = tls_key_password
 
+        connect_args.update(config.extra_options)
         conn = psycopg2.connect(**connect_args)
         # Enable autocommit to avoid "transaction aborted" errors on failed statements
         conn.autocommit = True
