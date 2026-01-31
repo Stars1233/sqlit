@@ -1167,6 +1167,9 @@ class SSMSTUI(
         if self._ui_stall_watchdog_timer is not None:
             self._ui_stall_watchdog_timer.stop()
             self._ui_stall_watchdog_timer = None
+        close_worker = getattr(self, "_close_process_worker_client", None)
+        if callable(close_worker):
+            close_worker()
 
     def _startup_stamp(self, name: str) -> None:
         if not self._startup_profile:

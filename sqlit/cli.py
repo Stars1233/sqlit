@@ -5,9 +5,12 @@ from __future__ import annotations
 
 import argparse
 import os
+import signal
+import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from sqlit.domains.connections.cli.helpers import add_schema_arguments, build_connection_config_from_args
 from sqlit.domains.connections.domain.config import AuthType, ConnectionConfig, DatabaseType
@@ -96,6 +99,72 @@ def _extract_connection_url(argv: list[str]) -> tuple[str | None, list[str]]:
         i += 1
 
     return url, result_argv
+
+
+def _sane_tty() -> None:
+    if os.name != "posix":
+        return
+    if not sys.stdin.isatty():
+        return
+    try:
+        subprocess.run(
+            ["stty", "sane"],
+            stdin=sys.stdin,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    except Exception:
+        pass
+
+
+def _run_app(app: Any) -> int:
+    exit_code: int | None = None
+    handled_signals = [signal.SIGINT, signal.SIGTERM]
+    for maybe_sig in (getattr(signal, "SIGHUP", None), getattr(signal, "SIGQUIT", None)):
+        if isinstance(maybe_sig, signal.Signals):
+            handled_signals.append(maybe_sig)
+
+    previous_handlers: dict[signal.Signals, Any] = {}
+
+    def _handle_signal(signum: int, _frame: Any) -> None:
+        nonlocal exit_code
+        exit_code = 128 + signum
+        try:
+            close_worker = getattr(app, "_close_process_worker_client", None)
+            if callable(close_worker):
+                close_worker()
+        except Exception:
+            pass
+        try:
+            app.exit()
+            return
+        except Exception:
+            _sane_tty()
+            raise KeyboardInterrupt
+
+    for sig in handled_signals:
+        try:
+            previous_handlers[sig] = signal.getsignal(sig)
+            signal.signal(sig, _handle_signal)
+        except Exception:
+            continue
+
+    try:
+        _sane_tty()
+        app.run()
+    except KeyboardInterrupt:
+        _sane_tty()
+        return exit_code if exit_code is not None else 130
+    finally:
+        _sane_tty()
+        for sig, handler in previous_handlers.items():
+            try:
+                signal.signal(sig, handler)
+            except Exception:
+                pass
+
+    return exit_code if exit_code is not None else 0
 
 
 def _parse_missing_drivers(value: str | None) -> set[str]:
@@ -550,7 +619,9 @@ def main() -> int:
             startup_connection=startup_config,
             exclusive_connection=exclusive_connection,
         )
-        app.run()
+        exit_code = _run_app(app)
+        if exit_code != 0:
+            return exit_code
         if getattr(app, "_restart_requested", False):
             argv = getattr(app, "_restart_argv", None) or app._compute_restart_argv()
             try:
@@ -601,8 +672,7 @@ def main() -> int:
             return 1
 
         app = SSMSTUI(services=services, startup_connection=temp_config)
-        app.run()
-        return 0
+        return _run_app(app)
 
     if args.command in {"connections", "connection"}:
         if args.conn_command == "list":
