@@ -20,6 +20,7 @@ class DatabaseType(str, Enum):
     FLIGHT = "flight"
     HANA = "hana"
     MARIADB = "mariadb"
+    MOTHERDUCK = "motherduck"
     MSSQL = "mssql"
     MYSQL = "mysql"
     ORACLE = "oracle"
@@ -52,6 +53,7 @@ DATABASE_TYPE_DISPLAY_ORDER: list[DatabaseType] = [
     DatabaseType.TRINO,
     DatabaseType.PRESTO,
     DatabaseType.DUCKDB,
+    DatabaseType.MOTHERDUCK,
     DatabaseType.REDSHIFT,
     DatabaseType.CLICKHOUSE,
     DatabaseType.COCKROACHDB,
