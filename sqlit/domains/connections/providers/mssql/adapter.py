@@ -180,7 +180,10 @@ class SQLServerAdapter(DatabaseAdapter):
         )
 
         conn_str = self._build_connection_string(config)
-        return mssql_python.connect(conn_str)
+        conn = mssql_python.connect(conn_str)
+        # Enable autocommit to allow DDL statements like CREATE DATABASE
+        conn.autocommit = True
+        return conn
 
     def get_databases(self, conn: Any) -> list[str]:
         """Get list of databases from SQL Server."""
