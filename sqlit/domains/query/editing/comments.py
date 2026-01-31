@@ -1,8 +1,93 @@
-"""Comment toggle helpers for SQL editing."""
+"""SQL comment handling - detection, toggling, and stripping.
+
+This module is the single source of truth for SQL comment logic.
+All comment-related operations should use these functions.
+"""
 
 from __future__ import annotations
 
+import re
+
 SQL_COMMENT_PREFIX = "-- "
+
+# Regex patterns for comment stripping
+_LINE_COMMENT_RE = re.compile(r"--[^\n]*")
+_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
+
+
+def is_comment_line(line: str) -> bool:
+    """Check if a line is a SQL line comment.
+
+    Args:
+        line: A single line of text.
+
+    Returns:
+        True if the line (after stripping whitespace) starts with --.
+    """
+    return line.strip().startswith("--")
+
+
+def is_comment_only_statement(statement: str) -> bool:
+    """Check if a SQL statement contains only comments (no actual SQL).
+
+    A statement is comment-only if every non-empty line starts with --.
+    This is used to filter out statements that would cause "empty query"
+    errors in database drivers that strip comments before execution.
+
+    Args:
+        statement: A SQL statement (may be multi-line).
+
+    Returns:
+        True if the statement contains only comments.
+    """
+    lines = statement.strip().split("\n")
+    for line in lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("--"):
+            return False
+    return True
+
+
+def strip_line_comments(sql: str) -> str:
+    """Remove all line comments (-- ...) from SQL.
+
+    Note: This is a simple regex-based approach that doesn't account for
+    -- inside string literals. For keyword detection this is usually fine,
+    but for actual SQL transformation, use with caution.
+
+    Args:
+        sql: SQL text that may contain line comments.
+
+    Returns:
+        SQL with line comments removed.
+    """
+    return _LINE_COMMENT_RE.sub("", sql)
+
+
+def strip_block_comments(sql: str) -> str:
+    """Remove all block comments (/* ... */) from SQL.
+
+    Args:
+        sql: SQL text that may contain block comments.
+
+    Returns:
+        SQL with block comments removed.
+    """
+    return _BLOCK_COMMENT_RE.sub("", sql)
+
+
+def strip_all_comments(sql: str) -> str:
+    """Remove all comments (both line and block) from SQL.
+
+    Args:
+        sql: SQL text that may contain comments.
+
+    Returns:
+        SQL with all comments removed.
+    """
+    result = strip_block_comments(sql)
+    result = strip_line_comments(result)
+    return result
 
 
 def toggle_comment_lines(text: str, start_row: int, end_row: int) -> tuple[str, int]:
@@ -30,9 +115,8 @@ def toggle_comment_lines(text: str, start_row: int, end_row: int) -> tuple[str, 
     # Determine if we should comment or uncomment based on first non-empty line
     should_comment = True
     for row in range(start_row, end_row + 1):
-        stripped = lines[row].lstrip()
-        if stripped:
-            should_comment = not stripped.startswith("--")
+        if lines[row].strip():
+            should_comment = not is_comment_line(lines[row])
             break
 
     # Apply toggle to each line

@@ -52,7 +52,7 @@ class QueryExecutionMixin(ProcessWorkerLifecycleMixin):
             self.notify("Connect to a server to execute queries", severity="warning")
             return
 
-        query = self.query_input.text.strip()
+        query = self._get_query_to_execute()
 
         if not query:
             self.notify("No query to execute", severity="warning")
@@ -113,13 +113,36 @@ class QueryExecutionMixin(ProcessWorkerLifecycleMixin):
 
         self._maybe_confirm_query(statement, _proceed)
 
+    def _get_query_to_execute(self: QueryMixinHost) -> str:
+        """Return selected text if present, otherwise the full query."""
+        selection = self.query_input.selection
+        if selection.start != selection.end:
+            from sqlit.domains.query.editing import get_selection_text
+
+            start = selection.start
+            end = selection.end
+            if start > end:
+                start, end = end, start
+
+            selected_sql = get_selection_text(
+                self.query_input.text,
+                start[0],
+                start[1],
+                end[0],
+                end[1],
+            )
+            if selected_sql and selected_sql.strip():
+                return selected_sql.strip()
+
+        return self.query_input.text.strip()
+
     def _execute_query_common(self: QueryMixinHost, keep_insert_mode: bool) -> None:
         """Common query execution logic."""
         if self.current_connection is None or self.current_provider is None:
             self.notify("Connect to a server to execute queries", severity="warning")
             return
 
-        query = self.query_input.text.strip()
+        query = self._get_query_to_execute()
 
         if not query:
             self.notify("No query to execute", severity="warning")
@@ -148,6 +171,7 @@ class QueryExecutionMixin(ProcessWorkerLifecycleMixin):
             format_alert_mode,
             should_confirm,
         )
+        from sqlit.domains.query.app.multi_statement import get_executable_sql
         from sqlit.shared.ui.screens.confirm import ConfirmScreen
 
         raw_mode = getattr(self.services.runtime, "query_alert_mode", 0) or 0
@@ -160,7 +184,14 @@ class QueryExecutionMixin(ProcessWorkerLifecycleMixin):
             proceed()
             return
 
-        severity = classify_query_alert(query)
+        # Get the SQL that will actually execute (without comment-only statements)
+        executable_sql = get_executable_sql(query)
+        if not executable_sql:
+            # Nothing to execute after filtering comments
+            proceed()
+            return
+
+        severity = classify_query_alert(executable_sql)
         if severity == AlertSeverity.NONE or not should_confirm(mode, severity):
             proceed()
             return
@@ -170,13 +201,6 @@ class QueryExecutionMixin(ProcessWorkerLifecycleMixin):
             title = "Confirm DELETE query"
         elif severity == AlertSeverity.WRITE:
             title = "Confirm write query"
-
-        description = None
-        snippet = query.strip().splitlines()[0] if query.strip() else ""
-        if snippet:
-            if len(snippet) > 120:
-                snippet = snippet[:117] + "..."
-            description = snippet
 
         def _on_result(confirmed: bool | None) -> None:
             if confirmed:
@@ -188,7 +212,7 @@ class QueryExecutionMixin(ProcessWorkerLifecycleMixin):
             )
 
         self.push_screen(
-            ConfirmScreen(title, description, yes_label="Run", no_label="Cancel"),
+            ConfirmScreen(title, executable_sql, yes_label="Yes", no_label="No"),
             _on_result,
         )
 
@@ -386,17 +410,20 @@ class QueryExecutionMixin(ProcessWorkerLifecycleMixin):
 
         # Use TransactionExecutor for transaction-aware query execution
         executor = self._get_transaction_executor(config, provider)
-        # Check if this is a multi-statement query
+        # Check if this is a multi-statement query (after filtering comment-only statements)
+        from sqlit.domains.query.editing.comments import is_comment_only_statement
+
         statements = split_statements(query)
-        is_multi_statement = len(statements) > 1
+        executable_statements = [s for s in statements if not is_comment_only_statement(s)]
+        is_multi_statement = len(executable_statements) > 1
 
         try:
             start_time = time.perf_counter()
             max_rows = self.services.runtime.max_rows or MAX_FETCH_ROWS
 
             use_process_worker = self._use_process_worker(provider)
-            if use_process_worker and statements:
-                statement = statements[0].strip()
+            if use_process_worker and executable_statements:
+                statement = executable_statements[0].strip()
                 if self.in_transaction or is_transaction_start(statement) or is_transaction_end(statement):
                     use_process_worker = False
 
