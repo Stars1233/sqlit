@@ -10,4 +10,5 @@ class VimMode(Enum):
 
     NORMAL = "NORMAL"
     INSERT = "INSERT"
+    VISUAL = "VISUAL"
     VISUAL_LINE = "VISUAL LINE"

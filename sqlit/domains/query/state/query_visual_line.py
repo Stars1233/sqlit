@@ -18,8 +18,10 @@ class QueryVisualLineModeState(State):
             label="Exit Visual",
             help="Exit visual line mode",
         )
-        # Block entering visual mode when already in it
+        # Block entering visual line mode when already in it
         self.forbids("enter_visual_line_mode")
+        # Switch to charwise visual
+        self.allows("switch_to_visual_mode", help="Switch to visual mode")
         # Block normal mode operators (visual mode uses direct operators)
         self.forbids("enter_insert_mode")
         self.forbids("delete_leader_key")

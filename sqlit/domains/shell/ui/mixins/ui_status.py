@@ -133,10 +133,12 @@ class UIStatusMixin:
 
         # Update CSS classes for border and cursor color
         # Only show vim mode colors when query pane has focus
-        query_area.remove_class("vim-normal", "vim-insert", "vim-visual-line")
+        query_area.remove_class("vim-normal", "vim-insert", "vim-visual", "vim-visual-line")
         if has_query_focus:
             if self.vim_mode == VimMode.NORMAL:
                 query_area.add_class("vim-normal")
+            elif self.vim_mode == VimMode.VISUAL:
+                query_area.add_class("vim-visual")
             elif self.vim_mode == VimMode.VISUAL_LINE:
                 query_area.add_class("vim-visual-line")
             else:
@@ -219,6 +221,9 @@ class UIStatusMixin:
                 if self.vim_mode == VimMode.NORMAL:
                     mode_str = f"[bold #1e1e1e on {normal_color}] NORMAL [/]  "
                     mode_plain = " NORMAL   "
+                elif self.vim_mode == VimMode.VISUAL:
+                    mode_str = f"[bold #1e1e1e on {normal_color}] VISUAL [/]  "
+                    mode_plain = " VISUAL   "
                 elif self.vim_mode == VimMode.VISUAL_LINE:
                     mode_str = f"[bold #1e1e1e on {normal_color}] V-LINE [/]  "
                     mode_plain = " V-LINE   "
@@ -463,7 +468,7 @@ class UIStatusMixin:
         if not ctx.modal_open and ctx.focus == "query":
             if ctx.vim_mode == VimMode.INSERT:
                 key_color = insert_color
-            elif ctx.vim_mode == VimMode.VISUAL_LINE:
+            elif ctx.vim_mode in (VimMode.VISUAL, VimMode.VISUAL_LINE):
                 key_color = normal_color
         footer.set_key_color(key_color)
 

@@ -31,12 +31,14 @@ class QueryEditingCursorMixin:
                 break
             row, col = new_row, new_col
 
-        # In visual line mode, update the visual selection directly instead of
-        # setting cursor_location, which would clear the TextArea selection.
+        # In visual modes, update the selection directly instead of setting
+        # cursor_location, which would clear the TextArea selection.
         from sqlit.core.vim import VimMode
 
         if self.vim_mode == VimMode.VISUAL_LINE and hasattr(self, "_update_visual_line_selection"):
             self._update_visual_line_selection(cursor_row=row)
+        elif self.vim_mode == VimMode.VISUAL and hasattr(self, "_update_visual_selection"):
+            self._update_visual_selection(cursor=(row, col))
         else:
             self.query_input.cursor_location = (row, col)
 
@@ -60,6 +62,8 @@ class QueryEditingCursorMixin:
 
         if self.vim_mode == VimMode.VISUAL_LINE and hasattr(self, "_update_visual_line_selection"):
             self._update_visual_line_selection(cursor_row=target_row)
+        elif self.vim_mode == VimMode.VISUAL and hasattr(self, "_update_visual_selection"):
+            self._update_visual_selection(cursor=(target_row, 0))
         else:
             self.query_input.cursor_location = (target_row, 0)
 
@@ -145,6 +149,8 @@ class QueryEditingCursorMixin:
             target_row = max(0, target_row)
             if self.vim_mode == VimMode.VISUAL_LINE and hasattr(self, "_update_visual_line_selection"):
                 self._update_visual_line_selection(cursor_row=target_row)
+            elif self.vim_mode == VimMode.VISUAL and hasattr(self, "_update_visual_selection"):
+                self._update_visual_selection(cursor=(target_row, 0))
             else:
                 self.query_input.cursor_location = (target_row, 0)
         else:
