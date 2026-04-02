@@ -136,6 +136,12 @@
         color: $surface;
     }
 
+    #query-area.vim-visual-line TextArea > .text-area--cursor {
+        /* Block cursor for VISUAL LINE mode */
+        background: $mode-normal-color;
+        color: $surface;
+    }
+
 
     #results-area DataTable {
         height: 1fr;

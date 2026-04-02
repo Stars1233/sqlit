@@ -200,6 +200,28 @@ class QueryTextArea(TextArea):
         # For all other keys, use default TextArea behavior
         await super()._on_key(event)
 
+    def _is_visual_line_mode(self) -> bool:
+        """Check if app is in vim VISUAL LINE mode."""
+        from sqlit.core.vim import VimMode
+        vim_mode = getattr(self.app, "vim_mode", None)
+        return vim_mode == VimMode.VISUAL_LINE
+
+    def action_cursor_up(self, select: bool = False) -> None:
+        """Override to delegate to app in visual line mode."""
+        if self._is_visual_line_mode():
+            if hasattr(self.app, "action_cursor_up"):
+                self.app.action_cursor_up()
+            return
+        super().action_cursor_up(select)
+
+    def action_cursor_down(self, select: bool = False) -> None:
+        """Override to delegate to app in visual line mode."""
+        if self._is_visual_line_mode():
+            if hasattr(self.app, "action_cursor_down"):
+                self.app.action_cursor_down()
+            return
+        super().action_cursor_down(select)
+
     def _is_text_modifying_key(self, key: str) -> bool:
         """Check if a key might modify text (expects normalized key)."""
         # Single characters, backspace, delete, enter are text-modifying

@@ -36,6 +36,7 @@ from sqlit.domains.query.state import (
     QueryFocusedState,
     QueryInsertModeState,
     QueryNormalModeState,
+    QueryVisualLineModeState,
 )
 from sqlit.domains.results.state import (
     ResultsFilterActiveState,
@@ -73,6 +74,7 @@ class UIStateMachine:
         self.tree_on_object = TreeOnObjectState(parent=self.tree_focused)
 
         self.query_focused = QueryFocusedState(parent=self.main_screen)
+        self.query_visual_line = QueryVisualLineModeState(parent=self.query_focused)
         self.query_normal = QueryNormalModeState(parent=self.query_focused)
         self.query_insert = QueryInsertModeState(parent=self.query_focused)
         self.autocomplete_active = AutocompleteActiveState(parent=self.query_focused)
@@ -96,6 +98,7 @@ class UIStateMachine:
             self.tree_on_object,  # For index/trigger/sequence nodes
             self.tree_focused,
             self.autocomplete_active,  # Before query_insert (more specific)
+            self.query_visual_line,  # Before query_normal (more specific)
             self.query_insert,
             self.query_normal,
             self.query_focused,
@@ -213,6 +216,15 @@ class UIStateMachine:
         lines.append(binding("^a", "Select all"))
         lines.append(binding("^c", "Copy selection"))
         lines.append(binding("^v", "Paste"))
+        lines.append("")
+        lines.append(subsection("Visual Line Mode (V):"))
+        lines.append(binding("<esc>", "Exit visual mode"))
+        lines.append(binding("j/k", "Extend selection down/up"))
+        lines.append(binding("gg/G", "Extend to first/last line"))
+        lines.append(binding("y", "Yank selected lines"))
+        lines.append(binding("d", "Delete selected lines"))
+        lines.append(binding("c", "Change selected lines"))
+        lines.append(binding("<enter>", "Execute selected lines"))
         lines.append("")
         lines.append(subsection("Vim Operators (Normal Mode):"))
         lines.append(binding("y{motion}", "Copy"))

@@ -15,11 +15,13 @@ from .query_editing_cursor import QueryEditingCursorMixin
 from .query_editing_operators import QueryEditingOperatorsMixin
 from .query_editing_selection import QueryEditingSelectionMixin
 from .query_editing_undo import QueryEditingUndoMixin
+from .query_editing_visual_line import QueryEditingVisualLineMixin
 from .query_execution import QueryExecutionMixin
 from .query_results import QueryResultsMixin
 
 
 class QueryMixin(
+    QueryEditingVisualLineMixin,
     QueryEditingCommonMixin,
     QueryEditingUndoMixin,
     QueryEditingSelectionMixin,

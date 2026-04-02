@@ -69,6 +69,8 @@ class QueryNormalModeState(State):
         # Undo/redo
         self.allows("undo", help="Undo")
         self.allows("redo", help="Redo")
+        # Visual line mode
+        self.allows("enter_visual_line_mode", label="Visual Line", help="Enter visual line mode")
 
     def get_display_bindings(self, app: InputContext) -> tuple[list[DisplayBinding], list[DisplayBinding]]:
         left: list[DisplayBinding] = []
