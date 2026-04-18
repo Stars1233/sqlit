@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 class ConnectionStore(JSONFileStore):
     """Store for managing saved database connections.
 
-    Connections are stored as a JSON object (versioned) in ~/.sqlit/connections.json.
+    Connections are stored as connections.json in the sqlit config directory (versioned).
     Passwords are stored separately in the OS keyring via CredentialsService.
     """
 

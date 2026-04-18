@@ -372,7 +372,7 @@ def main() -> int:
     parser.add_argument(
         "--settings",
         metavar="PATH",
-        help="Path to settings JSON file (overrides ~/.sqlit/settings.json)",
+        help="Path to settings JSON file (overrides the one in the sqlit config directory)",
     )
     parser.add_argument(
         "--theme",
