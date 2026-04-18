@@ -25,7 +25,7 @@
 ---
 
 ### Connect
-Supports all major databases: SQL Server, PostgreSQL, MySQL, SQLite, MariaDB, FirebirdSQL, Oracle, DuckDB, CockroachDB, ClickHouse, Snowflake, Supabase, CloudFlare D1, Turso, Athena, BigQuery, RedShift, IBM Db2, SAP HANA, Teradata, Trino, Presto and Apache Flight SQL.
+Supports all major databases: SQL Server, PostgreSQL, MySQL, SQLite, MariaDB, FirebirdSQL, Oracle, DuckDB, CockroachDB, ClickHouse, Snowflake, Supabase, CloudFlare D1, Turso, Athena, BigQuery, Spanner, RedShift, IBM Db2, SAP HANA, Teradata, Trino, Presto and Apache Flight SQL.
 
 ![Database Providers](docs/demos/demo-providers.gif)
 
@@ -233,13 +233,15 @@ Autocomplete triggers automatically in INSERT mode. Use `Tab` to accept.
 
 ## Configuration
 
-Connections and settings are stored in `~/.sqlit/`.
+Connections and settings are stored in `$XDG_CONFIG_HOME/sqlit/` (default: `~/.config/sqlit/`). Override the location by setting `SQLIT_CONFIG_DIR`.
+
+If an older install left files in `~/.sqlit/`, they are moved to the new location automatically on first run.
 
 ## FAQ
 
 ### How are sensitive credentials stored?
 
-Connection details are stored in `~/.sqlit/connections.json`, but passwords are stored in your OS keyring when available (macOS Keychain, Windows Credential Locker, Linux Secret Service).
+Connection details are stored in `connections.json` inside the config directory, but passwords are stored in your OS keyring when available (macOS Keychain, Windows Credential Locker, Linux Secret Service).
 
 ### How does sqlit compare to Harlequin, Lazysql, etc.?
 
@@ -281,6 +283,8 @@ Most of the time you can just run `sqlit` and connect. If a Python driver is mis
 | Snowflake                           | `snowflake-connector-python` | `pipx inject sqlit-tui snowflake-connector-python` | `python -m pip install snowflake-connector-python` |
 | Firebird                            | `firebirdsql`                | `pipx inject sqlit-tui firebirdsql`                | `python -m pip install firebirdsql`                |
 | Athena                              | `pyathena`                   | `pipx inject sqlit-tui pyathena`                   | `python -m pip install pyathena`                   |
+| BigQuery                            | `google-cloud-bigquery`      | `pipx inject sqlit-tui google-cloud-bigquery`      | `python -m pip install google-cloud-bigquery`      |
+| Spanner                             | `google-cloud-spanner`       | `pipx inject sqlit-tui google-cloud-spanner`       | `python -m pip install google-cloud-spanner`       |
 | Apache Arrow Flight SQL             | `adbc-driver-flightsql`      | `pipx inject sqlit-tui adbc-driver-flightsql`      | `python -m pip install adbc-driver-flightsql`      |
 
 ### SSH Tunnel Support

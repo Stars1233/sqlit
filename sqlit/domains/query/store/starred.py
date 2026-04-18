@@ -8,7 +8,7 @@ from sqlit.shared.core.store import CONFIG_DIR, JSONFileStore
 class StarredStore(JSONFileStore):
     """Store for managing starred queries.
 
-    Starred queries are stored as a JSON object in ~/.sqlit/starred_queries.json
+    Starred queries are stored as starred_queries.json in the sqlit config directory.
     Structure: { "connection_name": ["query1", "query2", ...] }
 
     Starred queries persist independently of history - they are never auto-deleted
