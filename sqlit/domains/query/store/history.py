@@ -44,7 +44,7 @@ class QueryHistoryEntry:
 class HistoryStore(JSONFileStore):
     """Store for managing query history.
 
-    History is stored as a JSON array in ~/.sqlit/query_history.json
+    History is stored as query_history.json in the sqlit config directory.
     Each entry includes query text, timestamp, and connection name.
     """
 

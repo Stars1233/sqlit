@@ -233,13 +233,15 @@ Autocomplete triggers automatically in INSERT mode. Use `Tab` to accept.
 
 ## Configuration
 
-Connections and settings are stored in `~/.sqlit/`.
+Connections and settings are stored in `$XDG_CONFIG_HOME/sqlit/` (default: `~/.config/sqlit/`). Override the location by setting `SQLIT_CONFIG_DIR`.
+
+If an older install left files in `~/.sqlit/`, they are moved to the new location automatically on first run.
 
 ## FAQ
 
 ### How are sensitive credentials stored?
 
-Connection details are stored in `~/.sqlit/connections.json`, but passwords are stored in your OS keyring when available (macOS Keychain, Windows Credential Locker, Linux Secret Service).
+Connection details are stored in `connections.json` inside the config directory, but passwords are stored in your OS keyring when available (macOS Keychain, Windows Credential Locker, Linux Secret Service).
 
 ### How does sqlit compare to Harlequin, Lazysql, etc.?
 
