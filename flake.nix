@@ -98,11 +98,10 @@
             };
           };
 
-        sqlit = makeSqlit { };
-        sqlit-full = makeSqlit { extras = builtins.attrNames nixpkgsExtras; };
+        sqlit = makeSqlit { extras = builtins.attrNames nixpkgsExtras; };
       in {
         packages = {
-          inherit sqlit sqlit-full;
+          inherit sqlit;
           default = sqlit;
         };
 

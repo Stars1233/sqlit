@@ -113,7 +113,7 @@ pip install sqlit-tui
 # Arch Linux (AUR)
 yay -S sqlit
 
-# Nix (flake) — append "#sqlit-full" for common DB drivers
+# Nix (flake)
 nix run github:Maxteabag/sqlit
 ```
 
