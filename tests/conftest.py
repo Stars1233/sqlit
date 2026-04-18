@@ -11,6 +11,7 @@ from tests.fixtures.d1 import *
 from tests.fixtures.duckdb import *
 from tests.fixtures.firebird import *
 from tests.fixtures.flight import *
+from tests.fixtures.impala import *
 from tests.fixtures.mariadb import *
 from tests.fixtures.mssql import *
 from tests.fixtures.mysql import *
@@ -23,6 +24,7 @@ from tests.fixtures.trino import *
 from tests.fixtures.ssh import *
 from tests.fixtures.spanner import *
 from tests.fixtures.sqlite import *
+from tests.fixtures.surrealdb import *
 from tests.fixtures.turso import *
 from tests.fixtures.utils import *
 
