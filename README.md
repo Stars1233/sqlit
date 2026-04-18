@@ -161,6 +161,10 @@ sqlit connections add athena --name "MyAthenaKeys" --athena-region-name "us-east
 sqlit connections add postgresql --name "RemoteDB" --server "db-host" --username "dbuser" --password "dbpass" \
   --ssh-enabled --ssh-host "ssh.example.com" --ssh-username "sshuser" --ssh-auth-type password --ssh-password "sshpass"
 
+# Fetch password from a secrets manager (1Password, pass, Vault, etc.)
+sqlit connections add postgresql --name "ProdDB" --server "prod.example.com" --username "dbuser" \
+  --password-command "op read 'op://Work/prod-db/password'"
+
 # Temporary (not saved) connection
 sqlit connect sqlite --file-path "/path/to/database.db"
 
