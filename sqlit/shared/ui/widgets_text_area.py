@@ -6,9 +6,10 @@ from typing import TYPE_CHECKING, cast
 
 from rich.segment import Segment
 from textual.color import Color
-from textual.events import Key
+from textual.events import Key, Paste
 from textual.strip import Strip
 from textual.widgets import TextArea
+from textual.widgets.text_area import Selection
 
 if TYPE_CHECKING:
     from sqlit.shared.ui.protocols import AutocompleteProtocol
@@ -117,7 +118,7 @@ class QueryTextArea(TextArea):
         self._sync_terminal_cursor()
 
     @property
-    def _draw_cursor(self) -> bool:  # type: ignore[override]
+    def _draw_cursor(self) -> bool:
         if self._should_use_terminal_cursor():
             return False
         return super()._draw_cursor
@@ -200,6 +201,23 @@ class QueryTextArea(TextArea):
         # For all other keys, use default TextArea behavior
         await super()._on_key(event)
 
+    async def _on_paste(self, event: Paste) -> None:
+        """Handle terminal-delivered paste text explicitly."""
+        if not self._is_insert_mode():
+            event.prevent_default()
+            event.stop()
+            return
+
+        self._push_undo_if_changed()
+        paste_text = getattr(self.app, "_paste_text", None)
+        if callable(paste_text):
+            paste_text(event.text)
+            event.prevent_default()
+            event.stop()
+            return
+
+        await super()._on_paste(event)
+
     def _is_visual_mode(self) -> bool:
         """Check if app is in any vim visual mode."""
         from sqlit.core.vim import VimMode
@@ -266,9 +284,9 @@ class QueryTextArea(TextArea):
             self._line_cache.clear()
             self.refresh()
 
-    def _watch_selection(self, previous_selection: object, selection: object) -> None:
+    def _watch_selection(self, previous_selection: Selection, selection: Selection) -> None:
         """Clear line cache when cursor row changes (for relative line numbers)."""
-        super()._watch_selection(previous_selection, selection)  # type: ignore[arg-type]
+        super()._watch_selection(previous_selection, selection)
         if self._relative_line_numbers and self.show_line_numbers:
             # Get current cursor row
             cursor_row = self.selection.end[0]

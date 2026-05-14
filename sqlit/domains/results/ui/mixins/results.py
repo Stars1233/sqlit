@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 from typing import Any
 
 from sqlit.shared.ui.protocols import ResultsMixinHost
@@ -112,9 +111,9 @@ class ResultsMixin:
     def _normalize_column_name(self: ResultsMixinHost, name: str) -> str:
         trimmed = name.strip()
         if len(trimmed) >= 2:
-            if trimmed[0] == trimmed[-1] and trimmed[0] in ("\"", "`"):
-                trimmed = trimmed[1:-1]
-            elif trimmed[0] == "[" and trimmed[-1] == "]":
+            if (trimmed[0] == trimmed[-1] and trimmed[0] in ("\"", "`")) or (
+                trimmed[0] == "[" and trimmed[-1] == "]"
+            ):
                 trimmed = trimmed[1:-1]
         if "." in trimmed and not any(q in trimmed for q in ("\"", "`", "[")):
             trimmed = trimmed.split(".")[-1]
@@ -139,33 +138,20 @@ class ResultsMixin:
 
     def _copy_text(self: ResultsMixinHost, text: str) -> bool:
         """Copy text to clipboard if possible, otherwise store internally."""
+        from sqlit.shared.ui.clipboard import copy_to_system_clipboard
+
         self._internal_clipboard = text
 
-        if sys.platform == "darwin":
-            # Prefer pyperclip on macOS; Textual's copy_to_clipboard can no-op.
-            try:
-                import pyperclip  # type: ignore
+        system_copied = copy_to_system_clipboard(text)
 
-                pyperclip.copy(text)
-                return True
-            except Exception:
-                pass
-
-        # Prefer Textual's clipboard support (OSC52 where available).
+        # Textual uses OSC52. It helps in terminals that support local clipboard
+        # writes, including some remote sessions where OS commands target the
+        # wrong machine.
         try:
             self.copy_to_clipboard(text)
             return True
         except Exception:
-            pass
-
-        # Fallback to system clipboard via pyperclip (requires platform support).
-        try:
-            import pyperclip  # type: ignore
-
-            pyperclip.copy(text)
-            return True
-        except Exception:
-            return False
+            return system_copied
 
     def _get_active_results_context(
         self: ResultsMixinHost,

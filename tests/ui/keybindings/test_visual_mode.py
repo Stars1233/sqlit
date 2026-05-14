@@ -315,6 +315,51 @@ class TestVisualModeOperators:
             assert app.query_input.text == "hello world"
 
     @pytest.mark.asyncio
+    async def test_normal_p_uses_internal_clipboard_when_system_clipboard_unavailable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        app = _make_app()
+
+        monkeypatch.setattr("sqlit.shared.ui.clipboard.get_system_clipboard_text", lambda: "")
+
+        async with app.run_test(size=(100, 35)) as pilot:
+            app.action_focus_query()
+            await pilot.pause()
+
+            app.query_input.text = "SELECT * FROM users"
+            app.query_input.cursor_location = (0, len(app.query_input.text))
+            app._internal_clipboard = " WHERE id = 1"
+            await pilot.pause()
+
+            await pilot.press("p")
+            await pilot.pause()
+
+            assert app.query_input.text == "SELECT * FROM users WHERE id = 1"
+
+    @pytest.mark.asyncio
+    async def test_normal_p_prefers_system_clipboard(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        app = _make_app()
+
+        monkeypatch.setattr(
+            "sqlit.shared.ui.clipboard.get_system_clipboard_text",
+            lambda: " WHERE active = true",
+        )
+
+        async with app.run_test(size=(100, 35)) as pilot:
+            app.action_focus_query()
+            await pilot.pause()
+
+            app.query_input.text = "SELECT * FROM users"
+            app.query_input.cursor_location = (0, len(app.query_input.text))
+            app._internal_clipboard = " WHERE id = 1"
+            await pilot.pause()
+
+            await pilot.press("p")
+            await pilot.pause()
+
+            assert app.query_input.text == "SELECT * FROM users WHERE active = true"
+
+    @pytest.mark.asyncio
     async def test_visual_delete(self) -> None:
         app = _make_app()
 
