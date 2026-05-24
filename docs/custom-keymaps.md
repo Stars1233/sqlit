@@ -1,283 +1,162 @@
 # Custom Keymaps
 
-sqlit supports custom keymaps, allowing you to customize all keyboard shortcuts to match your preferences.
+sqlit lets you override individual keybindings via a JSON file. Your overrides merge over the built-in defaults, so you only list what you want to change — anything you don't touch keeps its default behaviour. The footer hints and help screen (`?`) automatically reflect your custom keys.
 
-## Quick Start
+## Quick start
 
-1. **Copy the template:**
+1. Create the keymaps directory and copy the template:
    ```bash
    mkdir -p ~/.sqlit/keymaps
    cp config/keymap.template.json ~/.sqlit/keymaps/my-custom.json
    ```
 
-2. **Edit the keymap:**
-   Open `~/.sqlit/keymaps/my-custom.json` and customize the keybindings.
+2. Edit `~/.sqlit/keymaps/my-custom.json` and replace the example overrides with the ones you want.
 
-3. **Enable your custom keymap:**
-   Edit `~/.sqlit/settings.json` and set:
+3. Enable it by adding to `~/.sqlit/settings.json`:
    ```json
-   {
-     "custom_keymap": "my-custom"
-   }
+   { "custom_keymap": "my-custom" }
    ```
-   Note: Use the filename without the `.json` extension.
+   Use the filename without `.json`. To go back to defaults, set `"custom_keymap": "default"` or remove the key.
 
-4. **Restart sqlit** to load your custom keymap.
+4. Restart sqlit.
 
-## Keymap Structure
+## How merging works
 
-Custom keymaps are JSON files with two main sections:
+There are two binding types:
 
-### Leader Commands
+| Type | Identity for merging | What "override" means |
+|------|----------------------|-----------------------|
+| `action_keys` | `(action, context)` | Replaces the default's *primary* key for that action/context |
+| `leader_commands` | `(action, menu)` | Replaces the default leader key for that action in that menu |
 
-Leader commands are triggered by pressing the leader key (default: `space`) followed by another key.
+If your entry's identity matches a default, the default's primary slot is taken over by your entry. **Secondary defaults survive** — e.g. tree navigation has `j` (primary) plus `down` (alias); rebinding `j` doesn't kill `down`. If your entry doesn't match any default, it's added as a new binding.
+
+Because identity is `(action, ...)` and not `(key, ...)`, the cleanest way to remap is to specify the action you want to rebind and the new key. Optional fields (`label`, `category`, `guard`, `primary`, `show`, `priority`) are inherited from the matching default — you only need to repeat them when adding a brand-new binding that has no default.
+
+## Validation at startup
+
+sqlit validates the merged keymap before the app boots. If your overrides introduce a conflict (the same key bound to *different* actions in the same context or menu) the keymap is rejected and sqlit falls back to defaults with a clear stderr message naming the conflicting entries. Default-only overlaps that are disambiguated by runtime state (for example `d` on a connection vs. a folder) are tolerated.
+
+Missing `context` for a context-scoped action is also rejected — silently appending a duplicate global binding is almost never what you wanted. If you really do want a global binding, set `"context": null` explicitly.
+
+### Minimal override examples
+
+Move `Help` from `<leader>h` to `<leader>?`:
+```json
+{ "key": "question_mark", "action": "show_help" }
+```
+
+Use `ctrl+enter` to execute queries in normal mode (overrides the default `<enter>`):
+```json
+{ "key": "ctrl+enter", "action": "execute_query", "context": "query_normal" }
+```
+
+Add a brand-new binding (no matching default — needs `label` and `category`):
+```json
+{ "key": "R", "action": "refresh_tree", "label": "Refresh tree", "category": "View" }
+```
+
+## File format
 
 ```json
 {
   "keymap": {
-    "leader_commands": [
-      {
-        "key": "q",
-        "action": "quit",
-        "label": "Quit",
-        "category": "Actions",
-        "guard": null,
-        "menu": "leader"
-      }
-    ]
+    "leader_commands": [ /* leader-key bindings */ ],
+    "action_keys":      [ /* direct bindings */ ]
   }
 }
 ```
 
-**Fields:**
-- `key` (required): The key to press after the leader key
-- `action` (required): The action to execute
-- `label` (required): Display label in the help menu
-- `category` (required): Category for grouping in help menu
-- `guard` (optional): Condition that must be met (e.g., `"has_connection"`)
-- `menu` (optional): Menu ID (default: `"leader"`)
+### `leader_commands` fields
 
-### Action Keys
+| Field | Required? | Notes |
+|-------|-----------|-------|
+| `key` | yes | The key pressed after the leader (e.g. `"q"`, `"question_mark"`) |
+| `action` | yes | Action name |
+| `menu` | only if not `"leader"` | Submenu (e.g. `"delete"`, `"yank"`, `"g"`) |
+| `label` | only for new bindings | Display label; inherited from default when overriding |
+| `category` | only for new bindings | Group in command menu; inherited when overriding |
+| `guard` | optional | e.g. `"has_connection"`; inherited when overriding |
 
-Action keys are direct keybindings that work in specific contexts.
+### `action_keys` fields
 
-```json
-{
-  "keymap": {
-    "action_keys": [
-      {
-        "key": "i",
-        "action": "enter_insert_mode",
-        "context": "query_normal",
-        "guard": null,
-        "primary": true,
-        "show": false,
-        "priority": false
-      }
-    ]
-  }
-}
-```
+| Field | Required? | Notes |
+|-------|-----------|-------|
+| `key` | yes | Key combination (e.g. `"i"`, `"ctrl+q"`, `"escape"`) |
+| `action` | yes | Action name |
+| `context` | optional | e.g. `"query_normal"`, `"tree"`, `"results"`; `null` means global-no-context |
+| `guard` | optional | Inherited when overriding |
+| `primary` | optional, default `true` | Footer/help prefers primary keys |
+| `show` | optional, default `false` | Show in Textual's binding hints |
+| `priority` | optional, default `false` | Wins over child-widget bindings |
 
-**Fields:**
-- `key` (required): The key combination (e.g., `"i"`, `"ctrl+q"`, `"escape"`)
-- `action` (required): The action to execute
-- `context` (optional): Context where this binding is active (e.g., `"query_normal"`, `"tree"`, `"results"`)
-- `guard` (optional): Condition that must be met
-- `primary` (optional): Whether this is the primary binding for the action (default: `true`)
-- `show` (optional): Whether to show in Textual's binding hints (default: `false`)
-- `priority` (optional): Whether to give priority to this binding (default: `false`)
+## Special key names
 
-## Special Key Names
+`space`, `escape`, `enter`, `backspace`, `delete`, `tab`, `question_mark`, `slash`, `dollar_sign`, `percent_sign`, `asterisk`, `ctrl+<key>`, `shift+<key>`.
 
-Some keys use special names in the keymap:
+## Common actions
 
-- `space` - Space bar
-- `escape` - Escape key
-- `enter` - Enter/Return key
-- `backspace` - Backspace key
-- `delete` - Delete key
-- `tab` - Tab key
-- `question_mark` - ? key
-- `slash` - / key
-- `dollar_sign` - $ key
-- `percent_sign` - % key
-- `asterisk` - * key
-- `ctrl+<key>` - Ctrl key combinations (e.g., `"ctrl+q"`, `"ctrl+enter"`)
-- `shift+<key>` - Shift key combinations (e.g., `"shift+tab"`)
+### Global
+`quit`, `show_help`, `cancel_operation`, `leader_key`
 
-## Common Actions
+### Navigation (context: `navigation`)
+`focus_explorer`, `focus_query`, `focus_results`
 
-### Global Actions
-- `quit` - Exit sqlit
-- `show_help` - Show help menu
-- `cancel_operation` - Cancel current operation
-- `leader_key` - Trigger leader menu
+### Connection
+`show_connection_picker`, `disconnect`, `new_connection`
 
-### Navigation Actions
-- `focus_explorer` - Focus the database explorer
-- `focus_query` - Focus the query editor
-- `focus_results` - Focus the results table
+### Query editor (context: `query_normal`)
+`enter_insert_mode`, `prepend_insert_mode`, `append_insert_mode`, `append_line_end`,
+`open_line_below`, `open_line_above`, `execute_query`,
+`show_history`, `new_query`, `undo`, `redo`,
+`yank_leader_key`, `delete_leader_key`, `change_leader_key`, `g_leader_key`,
+`paste`
 
-### Connection Actions
-- `show_connection_picker` - Show connection picker
-- `disconnect` - Disconnect from database
-- `new_connection` - Create new connection
+### Query editor (context: `query_insert`)
+`exit_insert_mode`, `execute_query_insert`, `autocomplete_accept`,
+`select_all`, `copy_selection`, `paste`
 
-### Query Editor Actions (Normal Mode)
-- `enter_insert_mode` - Enter insert mode
-- `prepend_insert_mode` - Enter insert mode at line start
-- `append_insert_mode` - Enter insert mode after cursor
-- `append_line_end` - Enter insert mode at line end
-- `open_line_below` - Open new line below and enter insert mode
-- `open_line_above` - Open new line above and enter insert mode
-- `execute_query` - Execute the query
+### Vim cursor movement (context: `query_normal`)
+`cursor_left`, `cursor_down`, `cursor_up`, `cursor_right`,
+`cursor_word_forward`, `cursor_WORD_forward`,
+`cursor_word_back`, `cursor_WORD_back`,
+`cursor_line_start`, `cursor_line_end`, `cursor_last_line`,
+`cursor_find_char`, `cursor_find_char_back`,
+`cursor_till_char`, `cursor_till_char_back`,
+`cursor_matching_bracket`
 
-### Query Editor Actions (Insert Mode)
-- `exit_insert_mode` - Return to normal mode
-- `execute_query_insert` - Execute query from insert mode
+### Tree (context: `tree`)
+`tree_cursor_up`, `tree_cursor_down`, `tree_filter`, `collapse_tree`, `refresh_tree`,
+`select_table`, `new_connection`, `edit_connection`, `delete_connection`,
+`duplicate_connection`, `disconnect`
 
-### Vim-style Navigation
-- `cursor_left`, `cursor_down`, `cursor_up`, `cursor_right` - Move cursor
-- `cursor_word_forward` - Move to next word
-- `cursor_word_back` - Move to previous word
-- `cursor_line_start` - Move to line start
-- `cursor_line_end` - Move to line end
-- `cursor_last_line` - Move to last line
+### Results (context: `results`)
+`view_cell`, `view_cell_full`, `edit_cell`, `delete_row`,
+`results_yank_leader_key`, `clear_results`, `results_filter`,
+`results_cursor_left`, `results_cursor_down`, `results_cursor_up`, `results_cursor_right`,
+`next_result_section`, `prev_result_section`, `toggle_result_section`
 
-### Results Actions
-- `view_cell` - View cell value
-- `edit_cell` - Edit cell value
-- `delete_row` - Delete row
-- `results_yank_leader_key` - Trigger results copy menu
-- `clear_results` - Clear results
-- `results_filter` - Filter results
+### Autocomplete (context: `autocomplete`)
+`autocomplete_next`, `autocomplete_prev`, `autocomplete_close`
 
 ## Contexts
 
-Action keys can be scoped to specific contexts:
-
-- `global` - Active everywhere
-- `query_normal` - Query editor in normal mode
-- `query_insert` - Query editor in insert mode
-- `tree` - Database explorer tree
-- `results` - Results table
-- `navigation` - For navigation actions
-- `autocomplete` - Autocomplete dropdown
+`global`, `query_normal`, `query_insert`, `tree`, `tree_filter`, `tree_visual`,
+`results`, `results_filter`, `value_view`, `navigation`, `autocomplete`.
 
 ## Guards
 
-Guards are conditions that must be met for a keybinding to be active:
-
-- `has_connection` - Database is connected
-- `query_executing` - Query is currently executing
-
-## Examples
-
-### Vim-style Leader Key
-
-Change the leader key from space to comma:
-
-```json
-{
-  "keymap": {
-    "action_keys": [
-      {
-        "key": "comma",
-        "action": "leader_key",
-        "context": "global",
-        "primary": true,
-        "priority": true
-      }
-    ]
-  }
-}
-```
-
-### Emacs-style Bindings
-
-Use Ctrl+X Ctrl+C to quit instead of `<space>q`:
-
-```json
-{
-  "keymap": {
-    "leader_commands": [],
-    "action_keys": [
-      {
-        "key": "ctrl+x",
-        "action": "leader_key",
-        "context": "global",
-        "primary": true,
-        "priority": true
-      }
-    ]
-  }
-}
-```
-
-Then add a leader command:
-```json
-{
-  "key": "ctrl+c",
-  "action": "quit",
-  "label": "Quit",
-  "category": "Actions",
-  "menu": "leader"
-}
-```
-
-### Custom Query Execution
-
-Execute query with Ctrl+Enter in normal mode:
-
-```json
-{
-  "keymap": {
-    "action_keys": [
-      {
-        "key": "ctrl+enter",
-        "action": "execute_query",
-        "context": "query_normal",
-        "primary": true
-      }
-    ]
-  }
-}
-```
+- `has_connection` — a database connection is active
+- `query_executing` — a query is currently running
 
 ## Troubleshooting
 
-### Keymap not loading
+**Keymap doesn't load.** Make sure `custom_keymap` in `~/.sqlit/settings.json` matches your filename without `.json`. Check the console for `[sqlit] Failed to load custom keymap …`.
 
-1. Check that `custom_keymap` in `~/.sqlit/settings.json` matches your filename (without `.json`)
-2. Check console output for error messages: `sqlit 2>&1 | grep keymap`
-3. Verify JSON syntax with: `python -m json.tool ~/.sqlit/keymaps/my-custom.json`
+**Invalid JSON.** Validate with `python -m json.tool ~/.sqlit/keymaps/my-custom.json`.
 
-### Invalid JSON
+**Override is being ignored.** Confirm the `action` and `context`/`menu` exactly match a default. Identity is `(action, context)` for action keys and `(action, menu)` for leader commands — a typo in `context` adds a new binding instead of replacing the default.
 
-If sqlit reports JSON errors, validate your file:
+## Reverting
 
-```bash
-python -m json.tool ~/.sqlit/keymaps/my-custom.json > /dev/null
-```
-
-### Missing required fields
-
-Each leader command must have: `key`, `action`, `label`, `category`
-Each action key must have: `key`, `action`
-
-## Resetting to Default
-
-To revert to the default keymap, set in `~/.sqlit/settings.json`:
-
-```json
-{
-  "custom_keymap": "default"
-}
-```
-
-Or remove the `custom_keymap` field entirely.
-
-## Complete Example
-
-See `config/keymap.template.json` for a complete example with all common keybindings.
+Set `"custom_keymap": "default"` in settings, or remove the key entirely.

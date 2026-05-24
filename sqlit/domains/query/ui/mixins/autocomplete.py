@@ -245,21 +245,30 @@ class AutocompleteMixin(AutocompleteSchemaMixin, AutocompleteSuggestionsMixin):
 
         dropdown = self.autocomplete_dropdown
 
-        if event.key == "down":
+        from sqlit.core.keymap import get_keymap
+        keymap = get_keymap()
+        next_keys = keymap.keys_for_action("autocomplete_next")
+        prev_keys = keymap.keys_for_action("autocomplete_prev")
+        accept_keys = keymap.keys_for_action("autocomplete_accept")
+        close_keys = keymap.keys_for_action("autocomplete_close")
+
+        if event.key in next_keys:
             dropdown.move_selection(1)
             event.prevent_default()
             event.stop()
-        elif event.key == "up":
+        elif event.key in prev_keys:
             dropdown.move_selection(-1)
             event.prevent_default()
             event.stop()
-        elif event.key in ("tab", "enter"):
+        elif event.key in accept_keys or event.key == "enter":
+            # 'enter' is hardcoded as a secondary accept key — it doubles as
+            # newline-insert when there are no suggestions, so accept-on-enter
+            # only fires when the dropdown has results.
             if self.vim_mode == VimMode.INSERT and dropdown.filtered_items:
                 self._apply_autocomplete()
                 event.prevent_default()
                 event.stop()
-        elif event.key == "escape":
-            # Hide autocomplete AND exit insert mode (go to normal mode)
+        elif event.key in close_keys:
             self.action_exit_insert_mode()
             event.prevent_default()
             event.stop()

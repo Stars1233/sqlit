@@ -15,13 +15,11 @@ class HelpScreen(ModalScreen):
     """Modal screen showing keyboard shortcuts and navigation tips."""
 
     BINDINGS = [
-        Binding("escape", "dismiss", "Close"),
-        Binding("enter", "dismiss", "Close"),
-        Binding("q", "dismiss", "Close"),
-        Binding("j", "scroll_down", "Scroll down", show=False),
-        Binding("k", "scroll_up", "Scroll up", show=False),
-        Binding("g", "scroll_home", "Scroll to top", show=False),
-        Binding("G", "scroll_end", "Scroll to bottom", show=False),
+        Binding("escape,enter,q", "dismiss", "Close", id="help_dismiss"),
+        Binding("j", "scroll_down", "Scroll down", show=False, id="help_scroll_down"),
+        Binding("k", "scroll_up", "Scroll up", show=False, id="help_scroll_up"),
+        Binding("g", "scroll_home", "Scroll to top", show=False, id="help_scroll_home"),
+        Binding("G", "scroll_end", "Scroll to bottom", show=False, id="help_scroll_end"),
     ]
 
     CSS = """

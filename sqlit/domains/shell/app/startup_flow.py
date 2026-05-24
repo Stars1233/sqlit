@@ -36,6 +36,12 @@ def run_on_mount(app: AppProtocol) -> None:
     app._startup_stamp("settings_loaded")
 
     app._keymap_manager.initialize()
+    # Feed the (possibly user-customized) keymap into Textual so that any
+    # Binding with id=<action-name> picks up the user's key.
+    from sqlit.core.keymap import get_keymap
+    from sqlit.core.keymap_manager import build_textual_keymap
+
+    app.set_keymap(build_textual_keymap(get_keymap()))
     app._startup_stamp("keymap_loaded")
 
     app._expanded_paths = set(settings.get("expanded_nodes", []))

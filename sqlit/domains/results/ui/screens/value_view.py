@@ -18,13 +18,17 @@ from sqlit.shared.ui.widgets_json_tree import JSONTreeView, parse_json_value
 class ValueViewScreen(ModalScreen):
     """Modal screen for viewing a single (potentially long) value with tree/syntax toggle."""
 
+    # Each id matches an action name in DefaultKeymapProvider so that
+    # `App.set_keymap(...)` can remap them per the user's custom keymap.
+    # `enter` stays unbinded by id because it's a Textual-modal convention,
+    # not a user-overridable action.
     BINDINGS = [
-        Binding("escape", "dismiss", "Close"),
+        Binding("escape,q", "dismiss", "Close", id="close_value_view"),
         Binding("enter", "dismiss", "Close"),
-        Binding("q", "dismiss", "Close"),
-        Binding("y", "copy", "Copy"),
-        Binding("t", "toggle_view", "Toggle View"),
-        Binding("z", "collapse_all", "Collapse All", show=False),
+        Binding("y", "copy", "Copy", id="copy_value_view"),
+        Binding("t", "toggle_view", "Toggle View", id="toggle_value_view_mode"),
+        Binding("z", "collapse_all", "Collapse All", show=False, id="collapse_all_json_nodes"),
+        Binding("Z", "expand_all", "Expand All", show=False, id="expand_all_json_nodes"),
     ]
 
     CSS = """
@@ -130,6 +134,17 @@ class ValueViewScreen(ModalScreen):
         if self._is_json and self._tree_mode:
             try:
                 self.query_one("#json-tree-modal", JSONTreeView).action_collapse_all()
+            except Exception:
+                pass
+
+    def action_expand_all(self) -> None:
+        """Expand all tree nodes."""
+        if self._is_json and self._tree_mode:
+            try:
+                tree = self.query_one("#json-tree-modal", JSONTreeView)
+                expand_all = getattr(tree, "action_expand_all", None)
+                if callable(expand_all):
+                    expand_all()
             except Exception:
                 pass
 

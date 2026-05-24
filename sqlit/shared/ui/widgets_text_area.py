@@ -130,33 +130,45 @@ class QueryTextArea(TextArea):
         """Intercept clipboard, undo/redo, and Enter keys."""
         normalized_key = self._normalize_key(event.key)
 
+        from sqlit.core.keymap import get_keymap
+        keymap = get_keymap()
+        select_all_keys = keymap.keys_for_action("select_all")
+        copy_keys = keymap.keys_for_action("copy_selection")
+        # `paste` is bound in both query_normal (vim "p") and query_insert
+        # (ctrl+v). Restrict to the modifier-style keys for this handler so
+        # plain "p" in normal mode still reaches the vim operator.
+        paste_keys = [
+            k for k in keymap.keys_for_action("paste")
+            if "+" in k or len(k) > 1
+        ]
+        undo_keys = keymap.keys_for_action("undo")
+        redo_keys = keymap.keys_for_action("redo")
+
+        clipboard_keys = set(select_all_keys + copy_keys + paste_keys)
+
         # Clipboard shortcuts only work in INSERT mode (vim consistency)
-        if normalized_key in ("ctrl+a", "ctrl+c", "ctrl+v"):
+        if normalized_key in clipboard_keys:
             if not self._is_insert_mode():
                 # Block these in normal mode - use vim commands instead
                 event.prevent_default()
                 event.stop()
                 return
 
-            # Handle CTRL+A (select all) - override Emacs beginning-of-line
-            if normalized_key == "ctrl+a":
+            if normalized_key in select_all_keys:
                 if hasattr(self.app, "action_select_all"):
                     self.app.action_select_all()
                 event.prevent_default()
                 event.stop()
                 return
 
-            # Handle CTRL+C (copy) - override default behavior
-            if normalized_key == "ctrl+c":
+            if normalized_key in copy_keys:
                 if hasattr(self.app, "action_copy_selection"):
                     self.app.action_copy_selection()
                 event.prevent_default()
                 event.stop()
                 return
 
-            # Handle CTRL+V (paste) - override default behavior
-            if normalized_key == "ctrl+v":
-                # Push undo state before paste
+            if normalized_key in paste_keys:
                 self._push_undo_if_changed()
                 if hasattr(self.app, "action_paste"):
                     self.app.action_paste()
@@ -165,16 +177,14 @@ class QueryTextArea(TextArea):
                 return
 
         # Undo/redo work in both modes
-        # Handle CTRL+Z (undo)
-        if normalized_key == "ctrl+z":
+        if normalized_key in undo_keys and "+" in normalized_key:
             if hasattr(self.app, "action_undo"):
                 self.app.action_undo()
             event.prevent_default()
             event.stop()
             return
 
-        # Handle CTRL+Y (redo)
-        if normalized_key == "ctrl+y":
+        if normalized_key in redo_keys and "+" in normalized_key:
             if hasattr(self.app, "action_redo"):
                 self.app.action_redo()
             event.prevent_default()

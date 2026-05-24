@@ -23,12 +23,11 @@ class QueryHistoryScreen(ModalScreen):
     """Modal screen for query history selection."""
 
     BINDINGS = [
-        Binding("escape", "cancel", "Cancel", priority=True),
-        Binding("q", "cancel", "Cancel"),
-        Binding("enter", "select", "Select"),
-        Binding("d", "delete", "Delete"),
-        Binding("asterisk", "toggle_star", "Star"),
-        Binding("slash", "open_filter", "Filter"),
+        Binding("escape,q", "cancel", "Cancel", priority=True, id="query_history_cancel"),
+        Binding("enter", "select", "Select", id="query_history_select"),
+        Binding("d", "delete", "Delete", id="query_history_delete"),
+        Binding("asterisk", "toggle_star", "Star", id="query_history_toggle_star"),
+        Binding("slash", "open_filter", "Filter", id="query_history_open_filter"),
     ]
 
     CSS = """

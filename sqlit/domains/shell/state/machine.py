@@ -11,12 +11,10 @@ adding or overriding specific behaviors.
 from __future__ import annotations
 
 from sqlit.core.input_context import InputContext
-from sqlit.core.keymap import format_key
 from sqlit.core.leader_commands import get_leader_commands
 from sqlit.core.state_base import (
     ActionResult,
     DisplayBinding,
-    HelpEntry,
     State,
     resolve_display_key,
 )
@@ -132,10 +130,27 @@ class UIStateMachine:
         return state.__class__.__name__
 
     def generate_help_text(self) -> str:
-        """Generate structured help text with organized sections."""
-        from sqlit.core.keymap import format_key
+        """Generate structured help text with organized sections.
 
+        Keys are resolved from the active keymap so custom keybindings show up
+        here too. Literal fallbacks are kept for sequences that aren't bound to
+        a single action (command-mode prefixes, composite vim sequences).
+        """
+        from sqlit.core.keymap import format_key, get_keymap
+
+        keymap = get_keymap()
         leader_key = resolve_display_key("leader_key") or "<space>"
+
+        def k(action: str, fallback: str) -> str:
+            key = keymap.action(action)
+            return format_key(key) if key else fallback
+
+        def ks(actions_and_fallbacks: list[tuple[str, str]], sep: str = "/") -> str:
+            return sep.join(k(a, f) for a, f in actions_and_fallbacks)
+
+        def lk(action: str, menu: str, fallback: str) -> str:
+            key = keymap.leader(action, menu)
+            return format_key(key) if key else fallback
 
         def section(title: str) -> str:
             divider = "-" * 62
@@ -155,119 +170,129 @@ class UIStateMachine:
         # ═══════════════════════════════════════════════════════════════════
         lines.append(section("GLOBAL"))
         lines.append(binding(":q", "Quit"))
-        lines.append(binding(f"{leader_key}t", "Change theme"))
-        lines.append(binding(f"{leader_key}f", "Toggle fullscreen pane"))
-        lines.append(binding(f"{leader_key}e", "Toggle explorer visibility"))
+        lines.append(binding(f"{leader_key}{lk('change_theme', 'leader', 't')}", "Change theme"))
+        lines.append(binding(f"{leader_key}{lk('toggle_fullscreen', 'leader', 'f')}", "Toggle fullscreen pane"))
+        lines.append(binding(f"{leader_key}{lk('toggle_explorer', 'leader', 'e')}", "Toggle explorer visibility"))
         lines.append("")
 
         # ═══════════════════════════════════════════════════════════════════
         # NAVIGATION
         # ═══════════════════════════════════════════════════════════════════
         lines.append(section("NAVIGATION"))
-        lines.append(binding("e", "Focus Explorer pane"))
-        lines.append(binding("q", "Focus Query pane"))
-        lines.append(binding("r", "Focus Results pane"))
+        lines.append(binding(k("focus_explorer", "e"), "Focus Explorer pane"))
+        lines.append(binding(k("focus_query", "q"), "Focus Query pane"))
+        lines.append(binding(k("focus_results", "r"), "Focus Results pane"))
         lines.append(binding(leader_key, "Open command menu"))
-        lines.append(binding("?", "Show this help"))
+        lines.append(binding(k("show_help", "?"), "Show this help"))
         lines.append("")
 
         # ═══════════════════════════════════════════════════════════════════
         # EXPLORER
         # ═══════════════════════════════════════════════════════════════════
         lines.append(section("EXPLORER"))
-        lines.append(binding("j/k", "Move cursor down/up"))
+        lines.append(binding(ks([("tree_cursor_down", "j"), ("tree_cursor_up", "k")]), "Move cursor down/up"))
         lines.append(binding("<enter>", "Expand node / Connect"))
-        lines.append(binding("s", "SELECT TOP 100 (on table/view)"))
-        lines.append(binding("/", "Filter tree"))
-        lines.append(binding("z", "Collapse all nodes"))
-        lines.append(binding("f", "Refresh tree"))
+        lines.append(binding(k("select_table", "s"), "SELECT TOP 100 (on table/view)"))
+        lines.append(binding(k("tree_filter", "/"), "Filter tree"))
+        lines.append(binding(k("collapse_tree", "z"), "Collapse all nodes"))
+        lines.append(binding(k("refresh_tree", "f"), "Refresh tree"))
         lines.append("")
         lines.append(subsection("On Connection Node:"))
-        lines.append(binding("n", "New connection"))
-        lines.append(binding("e", "Edit connection"))
-        lines.append(binding("d", "Delete connection"))
-        lines.append(binding("D", "Duplicate connection"))
-        lines.append(binding("x", "Disconnect"))
+        lines.append(binding(k("new_connection", "n"), "New connection"))
+        lines.append(binding(k("edit_connection", "e"), "Edit connection"))
+        lines.append(binding(k("delete_connection", "d"), "Delete connection"))
+        lines.append(binding(k("duplicate_connection", "D"), "Duplicate connection"))
+        lines.append(binding(k("disconnect", "x"), "Disconnect"))
         lines.append("")
 
         # ═══════════════════════════════════════════════════════════════════
         # QUERY EDITOR
         # ═══════════════════════════════════════════════════════════════════
+        g_key = k("g_leader_key", "g")
         lines.append(section("QUERY EDITOR"))
         lines.append(subsection("Normal Mode:"))
-        lines.append(binding("i/I", "Enter INSERT mode"))
-        lines.append(binding("o/O", "Open line below/above"))
-        lines.append(binding("C", "Change to line end"))
-        lines.append(binding("D", "Delete to line end"))
-        lines.append(binding("<enter>/gr", "Execute query"))
-        lines.append(binding("gt", "Execute as transaction"))
-        lines.append(binding("<backspace>", "Query history"))
-        lines.append(binding("N", "New query (clear)"))
-        lines.append(binding("u", "Undo"))
-        lines.append(binding("^r", "Redo"))
+        lines.append(binding(ks([("enter_insert_mode", "i"), ("prepend_insert_mode", "I")]), "Enter INSERT mode"))
+        lines.append(binding(ks([("open_line_below", "o"), ("open_line_above", "O")]), "Open line below/above"))
+        lines.append(binding(k("change_line_end_motion", "C"), "Change to line end"))
+        lines.append(binding(k("delete_line_end", "D"), "Delete to line end"))
+        lines.append(binding(f"{k('execute_query', '<enter>')}/{g_key}{lk('execute_query', 'g', 'r')}", "Execute query"))
+        lines.append(binding(f"{g_key}{lk('execute_query_atomic', 'g', 't')}", "Execute as transaction"))
+        lines.append(binding(k("show_history", "<backspace>"), "Query history"))
+        lines.append(binding(k("new_query", "N"), "New query (clear)"))
+        lines.append(binding(k("undo", "u"), "Undo"))
+        lines.append(binding(k("redo", "^r"), "Redo"))
         lines.append("")
         lines.append(subsection("Insert Mode:"))
-        lines.append(binding("<esc>", "Exit to NORMAL mode"))
-        lines.append(binding("^<enter>", "Execute (stay in INSERT)"))
-        lines.append(binding("<tab>", "Accept autocomplete"))
-        lines.append(binding("^a", "Select all"))
-        lines.append(binding("^c", "Copy selection"))
-        lines.append(binding("^v", "Paste"))
+        lines.append(binding(k("exit_insert_mode", "<esc>"), "Exit to NORMAL mode"))
+        lines.append(binding(k("execute_query_insert", "^enter"), "Execute (stay in INSERT)"))
+        lines.append(binding(k("autocomplete_accept", "<tab>"), "Accept autocomplete"))
+        lines.append(binding(k("select_all", "^a"), "Select all"))
+        lines.append(binding(k("copy_selection", "^c"), "Copy selection"))
+        lines.append(binding(k("paste", "^v"), "Paste"))
         lines.append("")
+        # Operator + motion sequences: resolve the operator key, keep "{motion}" literal.
+        yank_op = k("yank_leader_key", "y")
+        del_op = k("delete_leader_key", "d")
+        chg_op = k("change_leader_key", "c")
         lines.append(subsection("Vim Operators (Normal Mode):"))
-        lines.append(binding("y{motion}", "Copy"))
-        lines.append(binding("d{motion}", "Delete"))
-        lines.append(binding("c{motion}", "Change (delete + INSERT)"))
-        lines.append(binding("p", "Paste after cursor"))
+        lines.append(binding(f"{yank_op}{{motion}}", "Copy"))
+        lines.append(binding(f"{del_op}{{motion}}", "Delete"))
+        lines.append(binding(f"{chg_op}{{motion}}", "Change (delete + INSERT)"))
+        lines.append(binding(k("paste", "p"), "Paste after cursor"))
         lines.append("")
         lines.append(subsection("Vim Motions:"))
-        lines.append(binding("h/j/k/l", "Cursor left/down/up/right"))
-        lines.append(binding("w/W", "Word forward"))
-        lines.append(binding("b/B", "Word backward"))
-        lines.append(binding("0/$", "Line start/end"))
-        lines.append(binding("gg/G", "File start/end"))
-        lines.append(binding("f{c}/F{c}", "Find char forward/back"))
-        lines.append(binding("t{c}/T{c}", "Till char forward/back"))
-        lines.append(binding("%", "Matching bracket"))
+        lines.append(binding(ks([("cursor_left", "h"), ("cursor_down", "j"), ("cursor_up", "k"), ("cursor_right", "l")]), "Cursor left/down/up/right"))
+        lines.append(binding(ks([("cursor_word_forward", "w"), ("cursor_WORD_forward", "W")]), "Word forward"))
+        lines.append(binding(ks([("cursor_word_back", "b"), ("cursor_WORD_back", "B")]), "Word backward"))
+        lines.append(binding(ks([("cursor_line_start", "0"), ("cursor_line_end", "$")]), "Line start/end"))
+        lines.append(binding(f"{g_key}{lk('first_line', 'g', 'g')}/{k('cursor_last_line', 'G')}", "File start/end"))
+        lines.append(binding(f"{k('cursor_find_char', 'f')}{{c}}/{k('cursor_find_char_back', 'F')}{{c}}", "Find char forward/back"))
+        lines.append(binding(f"{k('cursor_till_char', 't')}{{c}}/{k('cursor_till_char_back', 'T')}{{c}}", "Till char forward/back"))
+        lines.append(binding(k("cursor_matching_bracket", "%"), "Matching bracket"))
         lines.append("")
-        lines.append(subsection("Text Objects (with i=inner, a=around):"))
-        lines.append(binding("iw/aw", "Word"))
-        lines.append(binding('i"/a"', "Double quotes"))
-        lines.append(binding("i'/a'", "Single quotes"))
-        lines.append(binding("i)/a)", "Parentheses"))
-        lines.append(binding("i}/a}", "Braces"))
-        lines.append(binding("i]/a]", "Brackets"))
+        # Text objects: inner/around are leader_commands inside operator menus (yank/delete/change).
+        # Resolve from the yank menu — by convention these stay aligned across menus.
+        inner = lk("inner", "yank", "i")
+        around = lk("around", "yank", "a")
+        lines.append(subsection(f"Text Objects (with {inner}=inner, {around}=around):"))
+        lines.append(binding(f"{inner}w/{around}w", "Word"))
+        lines.append(binding(f'{inner}"/{around}"', "Double quotes"))
+        lines.append(binding(f"{inner}'/{around}'", "Single quotes"))
+        lines.append(binding(f"{inner})/{around})", "Parentheses"))
+        lines.append(binding(f"{inner}}}/{around}}}", "Braces"))
+        lines.append(binding(f"{inner}]/{around}]", "Brackets"))
         lines.append("")
 
         # ═══════════════════════════════════════════════════════════════════
         # RESULTS
         # ═══════════════════════════════════════════════════════════════════
         lines.append(section("RESULTS"))
-        lines.append(binding("h/j/k/l", "Navigate cells"))
-        lines.append(binding("v", "Preview cell (inline)"))
-        lines.append(binding("V", "View full cell value"))
-        lines.append(binding("u", "Generate UPDATE statement"))
-        lines.append(binding("d", "Generate DELETE statement"))
-        lines.append(binding("/", "Filter rows"))
-        lines.append(binding("x", "Clear results"))
-        lines.append(binding("<tab>", "Next result set"))
-        lines.append(binding("<s-tab>", "Previous result set"))
-        lines.append(binding("z", "Collapse/expand result"))
+        lines.append(binding(ks([("results_cursor_left", "h"), ("results_cursor_down", "j"), ("results_cursor_up", "k"), ("results_cursor_right", "l")]), "Navigate cells"))
+        lines.append(binding(k("view_cell", "v"), "Preview cell (inline)"))
+        lines.append(binding(k("view_cell_full", "V"), "View full cell value"))
+        lines.append(binding(k("edit_cell", "u"), "Generate UPDATE statement"))
+        lines.append(binding(k("delete_row", "d"), "Generate DELETE statement"))
+        lines.append(binding(k("results_filter", "/"), "Filter rows"))
+        lines.append(binding(k("clear_results", "x"), "Clear results"))
+        lines.append(binding(k("next_result_section", "<tab>"), "Next result set"))
+        lines.append(binding(k("prev_result_section", "<s-tab>"), "Previous result set"))
+        lines.append(binding(k("toggle_result_section", "z"), "Collapse/expand result"))
         lines.append("")
-        lines.append(subsection("Copy Menu (y):"))
-        lines.append(binding("yc", "Copy cell"))
-        lines.append(binding("yy", "Copy row"))
-        lines.append(binding("ya", "Copy all"))
-        lines.append(binding("ye", "Export menu..."))
+        results_yank = k("results_yank_leader_key", "y")
+        lines.append(subsection(f"Copy Menu ({results_yank}):"))
+        lines.append(binding(f"{results_yank}{lk('cell', 'ry', 'c')}", "Copy cell"))
+        lines.append(binding(f"{results_yank}{lk('row', 'ry', 'y')}", "Copy row"))
+        lines.append(binding(f"{results_yank}{lk('all', 'ry', 'a')}", "Copy all"))
+        lines.append(binding(f"{results_yank}{lk('export', 'ry', 'e')}", "Export menu..."))
         lines.append("")
 
         # ═══════════════════════════════════════════════════════════════════
         # FILTERING
         # ═══════════════════════════════════════════════════════════════════
         lines.append(section("FILTERING"))
-        lines.append(binding("/", "Open filter (Explorer/Results)"))
-        lines.append(binding("<enter>", "Apply filter"))
-        lines.append(binding("<esc>", "Close filter"))
+        lines.append(binding(k("results_filter", "/"), "Open filter (Explorer/Results)"))
+        lines.append(binding(k("results_filter_accept", "<enter>"), "Apply filter"))
+        lines.append(binding(k("results_filter_close", "<esc>"), "Close filter"))
         lines.append(binding("~prefix", "Fuzzy match mode"))
         lines.append("")
 
@@ -296,10 +321,10 @@ class UIStateMachine:
         lines.append(binding("/", "Search connections"))
         lines.append(binding("j/k", "Navigate list"))
         lines.append(binding("<enter>", "Connect to selected"))
-        lines.append(binding("n", "New connection"))
-        lines.append(binding("e", "Edit connection"))
-        lines.append(binding("d", "Delete connection"))
-        lines.append(binding("D", "Duplicate connection"))
+        lines.append(binding(k("new_connection", "n"), "New connection"))
+        lines.append(binding(k("edit_connection", "e"), "Edit connection"))
+        lines.append(binding(k("delete_connection", "d"), "Delete connection"))
+        lines.append(binding(k("duplicate_connection", "D"), "Duplicate connection"))
         lines.append(binding("<esc>", "Close picker"))
         lines.append("")
 

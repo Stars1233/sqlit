@@ -369,14 +369,19 @@ class DefaultKeymapProvider(KeymapProvider):
             # Query (insert mode)
             ActionKeyDef("escape", "exit_insert_mode", "query_insert"),
             ActionKeyDef("ctrl+enter", "execute_query_insert", "query_insert"),
-            ActionKeyDef("tab", "autocomplete_accept", "query_insert"),
+            # autocomplete_accept lives in the 'autocomplete' context below;
+            # the query_insert context still acquires it implicitly when the
+            # dropdown is visible.
             # Navigation
             ActionKeyDef("e", "focus_explorer", "navigation"),
             ActionKeyDef("q", "focus_query", "navigation"),
             ActionKeyDef("r", "focus_results", "navigation"),
             # Query (autocomplete)
             ActionKeyDef("ctrl+j", "autocomplete_next", "autocomplete"),
+            ActionKeyDef("down", "autocomplete_next", "autocomplete", primary=False),
             ActionKeyDef("ctrl+k", "autocomplete_prev", "autocomplete"),
+            ActionKeyDef("up", "autocomplete_prev", "autocomplete", primary=False),
+            ActionKeyDef("tab", "autocomplete_accept", "autocomplete"),
             ActionKeyDef("escape", "autocomplete_close", "autocomplete"),
             # Clipboard (only in insert mode for vim consistency)
             ActionKeyDef("ctrl+a", "select_all", "query_insert"),
