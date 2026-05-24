@@ -241,6 +241,25 @@ Connections and settings are stored in `$XDG_CONFIG_HOME/sqlit/` (default: `~/.c
 
 If an older install left files in `~/.sqlit/`, they are moved to the new location automatically on first run.
 
+### Custom keybindings
+
+Drop a JSON file in `~/.config/sqlit/keymaps/` and point `custom_keymap` in `settings.json` at it. The file lists only the bindings you want to change — anything you don't touch keeps its default. Footer hints and the help screen pick up your custom keys automatically.
+
+```json
+{
+  "keymap": {
+    "action_keys": {
+      "query_normal": {
+        "enter_insert_mode": "u",
+        "undo": null
+      }
+    }
+  }
+}
+```
+
+See [docs/custom-keymaps.md](docs/custom-keymaps.md) for the full action/state catalog and the unbind / alias-list semantics.
+
 ## FAQ
 
 ### How are sensitive credentials stored?
