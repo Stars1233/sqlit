@@ -49,18 +49,18 @@ class ConnectionPickerScreen(ModalScreen):
     """Modal screen for selecting a connection with fuzzy search."""
 
     BINDINGS = [
-        Binding("escape", "cancel_or_close_filter", "Cancel", id="picker_cancel"),
-        Binding("enter", "select", "Select", id="picker_select"),
-        Binding("s", "save", "Save", show=False, id="picker_save"),
-        Binding("n", "new_connection", "New", show=False, id="picker_new_connection"),
-        Binding("f", "refresh", "Refresh", show=False, id="picker_refresh"),
-        Binding("slash", "open_filter", "Search", show=False, id="picker_open_filter"),
-        Binding("up", "move_up", "Up", show=False, id="picker_move_up"),
-        Binding("down", "move_down", "Down", show=False, id="picker_move_down"),
+        Binding("escape", "cancel_or_close_filter", "Cancel"),
+        Binding("enter", "select", "Select"),
+        Binding("s", "save", "Save", show=False),
+        Binding("n", "new_connection", "New", show=False),
+        Binding("f", "refresh", "Refresh", show=False),
+        Binding("slash", "open_filter", "Search", show=False),
+        Binding("up", "move_up", "Up", show=False),
+        Binding("down", "move_down", "Down", show=False),
         Binding("backspace", "backspace", "Backspace", show=False),
-        Binding("tab", "switch_tab", "Switch Tab", show=False, id="picker_switch_tab"),
-        Binding("l", "cloud_logout", "Logout", show=False, id="picker_cloud_logout"),
-        Binding("w", "cloud_switch", "Switch", show=False, id="picker_cloud_switch"),
+        Binding("tab", "switch_tab", "Switch Tab", show=False),
+        Binding("l", "cloud_logout", "Logout", show=False),
+        Binding("w", "cloud_switch", "Switch", show=False),
     ]
 
     CSS = """

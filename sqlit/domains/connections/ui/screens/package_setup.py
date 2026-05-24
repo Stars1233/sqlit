@@ -22,7 +22,7 @@ class PackageSetupScreen(ModalScreen):
 
     BINDINGS = [
         Binding("enter", "install", "Install", priority=True),
-        Binding("y", "yank", "Copy", id="package_setup_yank"),
+        Binding("y", "yank", "Copy"),
         Binding("escape", "cancel", "Cancel", priority=True),
     ]
 

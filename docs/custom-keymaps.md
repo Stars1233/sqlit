@@ -1,6 +1,6 @@
 # Custom Keymaps
 
-sqlit lets you override individual keybindings via a JSON file. Your overrides merge over the built-in defaults, so you only list what you want to change — anything you don't touch keeps its default behaviour. The footer hints and help screen (`?`) automatically reflect your custom keys.
+sqlit lets you remap the keys that trigger any action. The set of actions and the states they live in is fixed by the app; the keymap JSON is *purely* a key-remapping layer on top of the defaults.
 
 ## Quick start
 
@@ -10,153 +10,141 @@ sqlit lets you override individual keybindings via a JSON file. Your overrides m
    cp config/keymap.template.json ~/.sqlit/keymaps/my-custom.json
    ```
 
-2. Edit `~/.sqlit/keymaps/my-custom.json` and replace the example overrides with the ones you want.
+2. Edit `~/.sqlit/keymaps/my-custom.json`. Only list the bindings you want to change.
 
 3. Enable it by adding to `~/.sqlit/settings.json`:
    ```json
    { "custom_keymap": "my-custom" }
    ```
-   Use the filename without `.json`. To go back to defaults, set `"custom_keymap": "default"` or remove the key.
+   Use the filename without `.json`. To revert, set `"custom_keymap": "default"` or remove the key.
 
-4. Restart sqlit.
+4. Restart sqlit. The footer and help screen (`?`) reflect your custom keys automatically.
 
-## How merging works
+## File shape
 
-There are two binding types:
-
-| Type | Identity for merging | What "override" means |
-|------|----------------------|-----------------------|
-| `action_keys` | `(action, context)` | Replaces the default's *primary* key for that action/context |
-| `leader_commands` | `(action, menu)` | Replaces the default leader key for that action in that menu |
-
-If your entry's identity matches a default, the default's primary slot is taken over by your entry. **Secondary defaults survive** — e.g. tree navigation has `j` (primary) plus `down` (alias); rebinding `j` doesn't kill `down`. If your entry doesn't match any default, it's added as a new binding.
-
-Because identity is `(action, ...)` and not `(key, ...)`, the cleanest way to remap is to specify the action you want to rebind and the new key. Optional fields (`label`, `category`, `guard`, `primary`, `show`, `priority`) are inherited from the matching default — you only need to repeat them when adding a brand-new binding that has no default.
-
-## Validation at startup
-
-sqlit validates the merged keymap before the app boots. If your overrides introduce a conflict (the same key bound to *different* actions in the same context or menu) the keymap is rejected and sqlit falls back to defaults with a clear stderr message naming the conflicting entries. Default-only overlaps that are disambiguated by runtime state (for example `d` on a connection vs. a folder) are tolerated.
-
-Missing `context` for a context-scoped action is also rejected — silently appending a duplicate global binding is almost never what you wanted. If you really do want a global binding, set `"context": null` explicitly.
-
-### Minimal override examples
-
-Move `Help` from `<leader>h` to `<leader>?`:
-```json
-{ "key": "question_mark", "action": "show_help" }
-```
-
-Use `ctrl+enter` to execute queries in normal mode (overrides the default `<enter>`):
-```json
-{ "key": "ctrl+enter", "action": "execute_query", "context": "query_normal" }
-```
-
-Add a brand-new binding (no matching default — needs `label` and `category`):
-```json
-{ "key": "R", "action": "refresh_tree", "label": "Refresh tree", "category": "View" }
-```
-
-## File format
+The JSON mirrors the state machine: each binding lives in the state (for action keys) or menu (for leader commands) where it is active.
 
 ```json
 {
   "keymap": {
-    "leader_commands": [ /* leader-key bindings */ ],
-    "action_keys":      [ /* direct bindings */ ]
+    "action_keys": {
+      "<state>": {
+        "<action>": "<key>"
+      }
+    },
+    "leader_commands": {
+      "<menu>": {
+        "<action>": "<key>"
+      }
+    }
   }
 }
 ```
 
-### `leader_commands` fields
+Values can be a single key string, or a list to provide aliases (the first entry is the primary key shown in footer/help):
 
-| Field | Required? | Notes |
-|-------|-----------|-------|
-| `key` | yes | The key pressed after the leader (e.g. `"q"`, `"question_mark"`) |
-| `action` | yes | Action name |
-| `menu` | only if not `"leader"` | Submenu (e.g. `"delete"`, `"yank"`, `"g"`) |
-| `label` | only for new bindings | Display label; inherited from default when overriding |
-| `category` | only for new bindings | Group in command menu; inherited when overriding |
-| `guard` | optional | e.g. `"has_connection"`; inherited when overriding |
+```json
+"tree": {
+  "refresh_tree": ["f", "R"]
+}
+```
 
-### `action_keys` fields
+A single string *replaces every default key* for that action in that state. A list lets you control the full set of keys explicitly.
 
-| Field | Required? | Notes |
-|-------|-----------|-------|
-| `key` | yes | Key combination (e.g. `"i"`, `"ctrl+q"`, `"escape"`) |
-| `action` | yes | Action name |
-| `context` | optional | e.g. `"query_normal"`, `"tree"`, `"results"`; `null` means global-no-context |
-| `guard` | optional | Inherited when overriding |
-| `primary` | optional, default `true` | Footer/help prefers primary keys |
-| `show` | optional, default `false` | Show in Textual's binding hints |
-| `priority` | optional, default `false` | Wins over child-widget bindings |
+## What you can change — and what you cannot
+
+You can change **which key** triggers a given action. That is the entire vocabulary.
+
+You cannot — and don't need to — set the action's label, category, guard, priority, or visibility. Those are properties of the action itself, defined in `sqlit/core/keymap.py`. The keymap is strictly a key-rebinding layer.
+
+You also cannot invent new actions or attach an existing action to a state it doesn't belong to. The loader rejects unknown `(state, action)` pairs with a clear error that lists the known actions for that state.
+
+## Validation at startup
+
+The keymap is checked before the app boots. Failures fall back to defaults and print to stderr:
+
+- **Unknown action in a state** — sqlit lists the actions that *do* exist in that state.
+- **Conflicting bindings** — two different actions claiming the same key in the same state (or the same menu, for leader commands). Default-only overlaps that are disambiguated by runtime state — e.g. `d` on a connection vs. on a folder, both in `tree` — are tolerated; only collisions you introduce are flagged.
+
+## States (for `action_keys`)
+
+| State | Where it applies |
+|-------|------------------|
+| `global` | Active everywhere |
+| `navigation` | Switching focus between the three panes |
+| `tree` | Database explorer tree |
+| `tree_filter` | Filter input over the explorer tree |
+| `tree_visual` | Tree visual selection mode |
+| `query_normal` | Query editor, NORMAL mode |
+| `query_insert` | Query editor, INSERT mode |
+| `autocomplete` | Autocomplete dropdown is visible |
+| `results` | Results table |
+| `results_filter` | Filter input over the results table |
+| `value_view` | Value-view modal |
+
+## Menus (for `leader_commands`)
+
+`leader` (the top-level command menu), plus the vim-style sub-menus: `delete`, `yank`, `change`, `g`, `gc` (line comments), `ry` (results yank), `rye` (results export), `vy` (value-view yank).
+
+## Action catalog
+
+The canonical list lives in `sqlit/core/keymap.py` — `DefaultKeymapProvider._build_action_keys()` and `_build_leader_commands()`. Use the in-app help (`?`) or read the source for the full set. The most commonly-rebound ones:
+
+**Global** — `leader_key`, `show_help`, `quit`, `cancel_operation`, `enter_command_mode`
+
+**Navigation** — `focus_explorer`, `focus_query`, `focus_results`
+
+**Tree** — `tree_cursor_up`, `tree_cursor_down`, `select_table`, `tree_filter`, `collapse_tree`, `refresh_tree`, `new_connection`, `edit_connection`, `delete_connection`, `duplicate_connection`, `disconnect`
+
+**Query (normal mode)** — `enter_insert_mode`, `prepend_insert_mode`, `append_insert_mode`, `append_line_end`, `open_line_below`, `open_line_above`, `execute_query`, `cursor_left`, `cursor_down`, `cursor_up`, `cursor_right`, `cursor_word_forward`, `cursor_WORD_forward`, `cursor_word_back`, `cursor_WORD_back`, `cursor_line_start`, `cursor_line_end`, `cursor_last_line`, `cursor_find_char`, `cursor_find_char_back`, `cursor_till_char`, `cursor_till_char_back`, `cursor_matching_bracket`, `paste`, `show_history`, `new_query`, `undo`, `redo`
+
+**Query (insert mode)** — `exit_insert_mode`, `execute_query_insert`, `autocomplete_accept`, `select_all`, `copy_selection`, `paste`
+
+**Autocomplete** — `autocomplete_next`, `autocomplete_prev`, `autocomplete_accept`, `autocomplete_close`
+
+**Results** — `view_cell`, `view_cell_full`, `edit_cell`, `delete_row`, `clear_results`, `results_filter`, `results_cursor_left/down/up/right`, `next_result_section`, `prev_result_section`, `toggle_result_section`
+
+**Value view** — `close_value_view`, `copy_value_view`, `toggle_value_view_mode`, `collapse_all_json_nodes`, `expand_all_json_nodes`
 
 ## Special key names
 
 `space`, `escape`, `enter`, `backspace`, `delete`, `tab`, `question_mark`, `slash`, `dollar_sign`, `percent_sign`, `asterisk`, `ctrl+<key>`, `shift+<key>`.
 
-## Common actions
+## Example
 
-### Global
-`quit`, `show_help`, `cancel_operation`, `leader_key`
+Rebind autocomplete to `ctrl+n`/`ctrl+p`, swap `<leader>h` to `<leader>?`, keep the arrow-key aliases for tree navigation, and use `ctrl+enter` to execute queries in normal mode:
 
-### Navigation (context: `navigation`)
-`focus_explorer`, `focus_query`, `focus_results`
-
-### Connection
-`show_connection_picker`, `disconnect`, `new_connection`
-
-### Query editor (context: `query_normal`)
-`enter_insert_mode`, `prepend_insert_mode`, `append_insert_mode`, `append_line_end`,
-`open_line_below`, `open_line_above`, `execute_query`,
-`show_history`, `new_query`, `undo`, `redo`,
-`yank_leader_key`, `delete_leader_key`, `change_leader_key`, `g_leader_key`,
-`paste`
-
-### Query editor (context: `query_insert`)
-`exit_insert_mode`, `execute_query_insert`, `autocomplete_accept`,
-`select_all`, `copy_selection`, `paste`
-
-### Vim cursor movement (context: `query_normal`)
-`cursor_left`, `cursor_down`, `cursor_up`, `cursor_right`,
-`cursor_word_forward`, `cursor_WORD_forward`,
-`cursor_word_back`, `cursor_WORD_back`,
-`cursor_line_start`, `cursor_line_end`, `cursor_last_line`,
-`cursor_find_char`, `cursor_find_char_back`,
-`cursor_till_char`, `cursor_till_char_back`,
-`cursor_matching_bracket`
-
-### Tree (context: `tree`)
-`tree_cursor_up`, `tree_cursor_down`, `tree_filter`, `collapse_tree`, `refresh_tree`,
-`select_table`, `new_connection`, `edit_connection`, `delete_connection`,
-`duplicate_connection`, `disconnect`
-
-### Results (context: `results`)
-`view_cell`, `view_cell_full`, `edit_cell`, `delete_row`,
-`results_yank_leader_key`, `clear_results`, `results_filter`,
-`results_cursor_left`, `results_cursor_down`, `results_cursor_up`, `results_cursor_right`,
-`next_result_section`, `prev_result_section`, `toggle_result_section`
-
-### Autocomplete (context: `autocomplete`)
-`autocomplete_next`, `autocomplete_prev`, `autocomplete_close`
-
-## Contexts
-
-`global`, `query_normal`, `query_insert`, `tree`, `tree_filter`, `tree_visual`,
-`results`, `results_filter`, `value_view`, `navigation`, `autocomplete`.
-
-## Guards
-
-- `has_connection` — a database connection is active
-- `query_executing` — a query is currently running
+```json
+{
+  "keymap": {
+    "action_keys": {
+      "query_normal": {
+        "execute_query": "ctrl+enter"
+      },
+      "autocomplete": {
+        "autocomplete_next": "ctrl+n",
+        "autocomplete_prev": "ctrl+p"
+      },
+      "tree": {
+        "tree_cursor_down": ["j", "down"],
+        "tree_cursor_up":   ["k", "up"]
+      }
+    },
+    "leader_commands": {
+      "leader": {
+        "show_help": "question_mark"
+      }
+    }
+  }
+}
+```
 
 ## Troubleshooting
 
-**Keymap doesn't load.** Make sure `custom_keymap` in `~/.sqlit/settings.json` matches your filename without `.json`. Check the console for `[sqlit] Failed to load custom keymap …`.
+**Keymap didn't load.** Check `~/.sqlit/settings.json` — `custom_keymap` must match your filename without the `.json`. Check stderr for `[sqlit] Failed to load custom keymap …`.
 
-**Invalid JSON.** Validate with `python -m json.tool ~/.sqlit/keymaps/my-custom.json`.
+**"Unknown action" error.** The action doesn't exist in the state you named. The error message lists the known actions for that state — pick one of those, or check the canonical list in `sqlit/core/keymap.py`.
 
-**Override is being ignored.** Confirm the `action` and `context`/`menu` exactly match a default. Identity is `(action, context)` for action keys and `(action, menu)` for leader commands — a typo in `context` adds a new binding instead of replacing the default.
+**"Conflicting keybindings" error.** Your overrides bind the same key to two different actions in the same state. Pick a different key, or remove the redundant entry.
 
-## Reverting
-
-Set `"custom_keymap": "default"` in settings, or remove the key entirely.
+**Invalid JSON.** Run `python -m json.tool ~/.sqlit/keymaps/my-custom.json` to find the syntax error.

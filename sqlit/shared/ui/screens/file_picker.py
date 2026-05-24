@@ -31,7 +31,7 @@ class FilePickerScreen(ModalScreen[str | None]):
     BINDINGS = [
         Binding("escape", "cancel", "Cancel", priority=True),
         Binding("tab,shift+tab", "toggle_focus", "Switch focus", show=False),
-        Binding("s", "save", "Save", show=False, id="file_picker_save"),
+        Binding("s", "save", "Save", show=False),
     ]
 
     CSS = """

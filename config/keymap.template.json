@@ -1,39 +1,24 @@
 {
   "_note": "Copy to ~/.sqlit/keymaps/<name>.json and set 'custom_keymap' to '<name>' in settings.json.",
-  "_help": "Only list the bindings you want to change — your entries merge over the defaults. See docs/custom-keymaps.md for the full action list.",
+  "_help": "Only list the bindings you want to change. Each entry maps action → key (or [primary, alias...]) within its state. See docs/custom-keymaps.md for the action/state catalog.",
   "keymap": {
-    "leader_commands": [
-      {
-        "_comment": "Move 'Help' from <leader>h to <leader>?",
-        "key": "question_mark",
-        "action": "show_help"
+    "action_keys": {
+      "query_normal": {
+        "execute_query": "ctrl+enter"
       },
-      {
-        "_comment": "Add a new leader binding to refresh the tree on <leader>R",
-        "key": "R",
-        "action": "refresh_tree",
-        "label": "Refresh tree",
-        "category": "View"
+      "autocomplete": {
+        "autocomplete_next": "ctrl+n",
+        "autocomplete_prev": "ctrl+p"
+      },
+      "tree": {
+        "tree_cursor_down": ["j", "down"],
+        "tree_cursor_up": ["k", "up"]
       }
-    ],
-    "action_keys": [
-      {
-        "_comment": "Use ctrl+enter to execute queries in normal mode (instead of <enter>)",
-        "key": "ctrl+enter",
-        "action": "execute_query",
-        "context": "query_normal"
-      },
-      {
-        "_comment": "Autocomplete cycling: ctrl+n / ctrl+p (instead of ctrl+j / ctrl+k)",
-        "key": "ctrl+n",
-        "action": "autocomplete_next",
-        "context": "autocomplete"
-      },
-      {
-        "key": "ctrl+p",
-        "action": "autocomplete_prev",
-        "context": "autocomplete"
+    },
+    "leader_commands": {
+      "leader": {
+        "show_help": "question_mark"
       }
-    ]
+    }
   }
 }

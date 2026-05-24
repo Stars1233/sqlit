@@ -24,7 +24,7 @@ from textual.worker import Worker
 
 from sqlit.core.input_context import InputContext
 from sqlit.core.key_router import resolve_action
-from sqlit.core.keymap_manager import KeymapManager
+from sqlit.domains.shell.app.keymap_manager import KeymapManager
 from sqlit.core.vim import VimMode
 from sqlit.domains.connections.domain.config import ConnectionConfig
 from sqlit.domains.connections.providers.model import DatabaseProvider
@@ -512,6 +512,13 @@ class SSMSTUI(
         self._command_buffer = ""
         self._update_status_bar()
 
+    def action_enter_command_mode(self) -> None:
+        # Entered by the keymap-bound key (default ":"). The query-insert
+        # guard lives in _handle_command_input so a user typing ":" in a
+        # SQL string still inserts it; this method is a no-op alias used
+        # only to satisfy the action validator for the keymap entry.
+        self._start_command_mode()
+
     def _exit_command_mode(self) -> None:
         self._command_mode = False
         self._command_buffer = ""
@@ -573,10 +580,12 @@ class SSMSTUI(
         return True
 
     def _handle_command_input(self, event: Key, ctx: InputContext) -> bool:
+        from sqlit.core.keymap import get_keymap
         from sqlit.core.vim import VimMode
 
         if not self._command_mode:
-            is_command_start = event.character == ":" or event.key in {":", "colon", "shift+semicolon"}
+            command_keys = get_keymap().keys_for_action("enter_command_mode")
+            is_command_start = event.key in command_keys or event.character in command_keys
             if not is_command_start:
                 return False
             if ctx.focus == "query" and self.vim_mode == VimMode.INSERT:

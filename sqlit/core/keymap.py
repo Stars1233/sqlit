@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from dataclasses import dataclass
 
 from sqlit.shared.core.debug_events import emit_debug_event
@@ -330,6 +331,9 @@ class DefaultKeymapProvider(KeymapProvider):
             ActionKeyDef("ctrl+q", "quit", "global"),
             ActionKeyDef("escape", "cancel_operation", "global"),
             ActionKeyDef("question_mark", "show_help", "global"),
+            ActionKeyDef("colon", "enter_command_mode", "global"),
+            ActionKeyDef("shift+semicolon", "enter_command_mode", "global", primary=False),
+            ActionKeyDef(":", "enter_command_mode", "global", primary=False),
             # Query (normal mode)
             ActionKeyDef("i", "enter_insert_mode", "query_normal"),
             ActionKeyDef("I", "prepend_insert_mode", "query_normal"),
@@ -491,3 +495,18 @@ def emit_keybinding_snapshot(provider: KeymapProvider | None = None) -> None:
             keymap._action_emitted = True  # type: ignore[attr-defined]
         except Exception:
             pass
+
+
+def build_textual_keymap(provider: KeymapProvider) -> dict[str, str]:
+    """Build a Textual-compatible keymap dict from a KeymapProvider.
+
+    Groups action keys by action name (across contexts) and joins the keys
+    with commas — Textual's set_keymap accepts comma-separated key lists.
+    Use the result with ``App.set_keymap(...)`` so that Bindings with
+    matching ``id=`` get their keys overridden at runtime.
+    """
+    by_action: dict[str, list[str]] = defaultdict(list)
+    for ak in provider.get_action_keys():
+        if ak.key not in by_action[ak.action]:
+            by_action[ak.action].append(ak.key)
+    return {action: ",".join(keys) for action, keys in by_action.items()}

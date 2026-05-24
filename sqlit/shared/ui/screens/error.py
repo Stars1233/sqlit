@@ -15,7 +15,7 @@ class ErrorScreen(ModalScreen):
 
     BINDINGS = [
         Binding("enter,escape", "close", "Close"),
-        Binding("y", "copy_message", "Copy", id="error_copy_message"),
+        Binding("y", "copy_message", "Copy"),
     ]
 
     CSS = """
