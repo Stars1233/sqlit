@@ -305,6 +305,41 @@ class TestFriendlyKeyNames:
         )
         assert get_keymap().leader("show_help", "leader") == "question_mark"
 
+    def test_literal_plus_via_double_plus_preserved(self):
+        """`ctrl++` means ctrl + plus key; must round-trip unchanged."""
+        from sqlit.domains.shell.app.keymap_manager import _expand_user_key
+        assert _expand_user_key("ctrl++") == ["ctrl++"]
+        assert _expand_user_key("++") == ["++"]
+
+    def test_shift_modifier_does_not_double_when_canonical_already_has_shift(
+        self, tmp_path: Path
+    ):
+        """`shift+:` must not expand to `shift+shift+semicolon`.
+
+        The friendly char `:` expands to three canonical variants, one of
+        which (`shift+semicolon`) already carries a shift prefix. Naively
+        concatenating the user's `shift+` prefix produces `shift+shift+...`,
+        which Textual won't match — the binding silently dies.
+        """
+        _load(
+            tmp_path,
+            "shift-friendly",
+            {
+                "keymap": {
+                    "action_keys": {
+                        "query_normal": {"new_query": "shift+:"}
+                    }
+                }
+            },
+        )
+        keys = get_keymap().keys_for_action("new_query")
+        # No canonical key should ever start with "shift+shift+".
+        bad = [k for k in keys if "shift+shift+" in k]
+        assert not bad, (
+            f"shift+<friendly> expansion produced malformed canonical(s): {bad}; "
+            f"all keys: {keys}"
+        )
+
 
 class TestUnbind:
     """null / "" / [] removes a default binding without adding a replacement."""

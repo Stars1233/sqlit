@@ -97,17 +97,6 @@ _FRIENDLY_TO_CANONICAL: dict[str, list[str]] = {
     "_": ["underscore"],
 }
 
-# Reverse map (canonical → friendly) for emitting templates and any
-# user-facing serialization of the default keymap. Multi-variant
-# entries collapse to their first canonical, since the friendly form
-# is the same for all of them.
-_CANONICAL_TO_FRIENDLY: dict[str, str] = {
-    canonical: friendly
-    for friendly, canonicals in _FRIENDLY_TO_CANONICAL.items()
-    for canonical in canonicals
-}
-
-
 def _expand_user_key(key: str) -> list[str]:
     """Expand a single user-supplied key string to its canonical Textual form(s).
 
@@ -116,30 +105,41 @@ def _expand_user_key(key: str) -> list[str]:
     the modifiers to each canonical variant. Unknown bases pass through
     unchanged so Textual's own key names (e.g. ``escape``, ``f5``) keep
     working.
+
+    When a canonical variant already carries one of the user's modifiers
+    (e.g. ``":"`` expands to include ``"shift+semicolon"`` and the user
+    wrote ``"shift+:"``), we deduplicate so we don't produce a malformed
+    ``shift+shift+semicolon`` that Textual would silently ignore.
     """
     parts = key.split("+")
     base = parts[-1]
     modifiers = parts[:-1]
+
+    # Trailing "+" in input (e.g. "ctrl++") means the literal plus key.
+    # Splitting leaves an empty base — preserve the user's input verbatim
+    # rather than trying to canonicalize.
+    if base == "":
+        return [key]
+
     canonicals = _FRIENDLY_TO_CANONICAL.get(base, [base])
     if not modifiers:
         return list(canonicals)
-    prefix = "+".join(modifiers) + "+"
-    return [prefix + c for c in canonicals]
 
-
-def canonical_to_friendly(key: str) -> str:
-    """Convert a canonical Textual key name to its friendly form for display.
-
-    Used when generating the template from defaults. Keeps modifier
-    prefixes intact and only rewrites the base name.
-    """
-    parts = key.split("+")
-    base = parts[-1]
-    modifiers = parts[:-1]
-    friendly = _CANONICAL_TO_FRIENDLY.get(base, base)
-    if not modifiers:
-        return friendly
-    return "+".join(modifiers) + "+" + friendly
+    user_mods = set(modifiers)
+    expanded: list[str] = []
+    seen: set[str] = set()
+    for canonical in canonicals:
+        canon_parts = canonical.split("+")
+        canon_mods = set(canon_parts[:-1])
+        canon_base = canon_parts[-1]
+        # Union the user's modifiers with whatever the canonical already
+        # has — keeps each modifier exactly once.
+        merged_mods = sorted(user_mods | canon_mods)
+        combined = "+".join(merged_mods + [canon_base]) if merged_mods else canon_base
+        if combined not in seen:
+            seen.add(combined)
+            expanded.append(combined)
+    return expanded
 
 
 class FileBasedKeymapProvider(KeymapProvider):
