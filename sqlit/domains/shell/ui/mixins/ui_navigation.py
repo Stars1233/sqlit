@@ -183,6 +183,12 @@ class UINavigationMixin(UIStatusMixin, UILeaderMixin):
         active_section_id = self._state_machine.get_active_help_section_id(ctx)
         self.push_screen(HelpScreen(sections, active_section_id))
 
+    def action_show_keybinding_editor(self: UINavigationMixinHost) -> None:
+        """Open the in-app keybinding editor."""
+        from ..screens import KeybindingEditorScreen
+
+        self.push_screen(KeybindingEditorScreen())
+
     def action_toggle_process_worker(self: UINavigationMixinHost) -> None:
         """Toggle the process worker setting."""
         enabled = not bool(self.services.runtime.process_worker)

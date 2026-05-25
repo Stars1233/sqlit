@@ -204,6 +204,7 @@ class DefaultKeymapProvider(KeymapProvider):
                 "Actions",
             ),
             LeaderCommandDef("h", "show_help", "Help", "Actions"),
+            LeaderCommandDef("k", "show_keybinding_editor", "Edit Keybindings", "Actions"),
             LeaderCommandDef("space", "telescope", "Telescope", "Actions"),
             LeaderCommandDef("slash", "telescope_filter", "Telescope Search", "Actions"),
             # Delete menu (vim-style)

@@ -31,8 +31,15 @@ def _write(path: Path, payload: dict) -> Path:
 
 
 def _load(tmp_path: Path, name: str, payload: dict) -> KeymapManager:
-    file_path = _write(tmp_path / f"{name}.json", payload)
-    manager = KeymapManager(settings_store=MockSettingsStore({"custom_keymap": str(file_path)}))
+    """Write ``payload`` to the (test-isolated) DEFAULT_KEYMAP_FILE and load it.
+
+    The ``name`` arg is kept for legacy test signatures but no longer maps
+    to a separate file — there's only one keymap file now.
+    """
+    del name  # signature compatibility; single-file model has no named paths
+    from sqlit.domains.shell.app import keymap_manager as km_mod
+    _write(km_mod.DEFAULT_KEYMAP_FILE, payload)
+    manager = KeymapManager(settings_store=MockSettingsStore({}))
     manager.initialize()
     return manager
 
@@ -63,13 +70,16 @@ class TestLifecycle:
         assert manager.load_error is None
         assert get_keymap().action("enter_insert_mode") == "i"
 
-    def test_default_sentinel_uses_scaffold_only(self):
-        manager = KeymapManager(settings_store=MockSettingsStore({"custom_keymap": "default"}))
+    def test_unknown_settings_are_ignored(self):
+        # Legacy `custom_keymap` settings used to switch to a named file.
+        # That mechanism is gone — settings are no longer consulted, so
+        # passing one should be a no-op rather than an error.
+        manager = KeymapManager(settings_store=MockSettingsStore({"custom_keymap": "my-old-name"}))
         manager.initialize()
         assert manager.load_error is None
         assert get_keymap().action("enter_insert_mode") == "i"
 
-    def test_scaffold_created_on_first_run(self, tmp_path_factory):
+    def test_scaffold_created_on_first_run(self):
         # The autouse fixture redirected DEFAULT_KEYMAP_FILE to a fresh tmp dir.
         from sqlit.domains.shell.app import keymap_manager as km_mod
         assert not km_mod.DEFAULT_KEYMAP_FILE.exists()
@@ -78,29 +88,27 @@ class TestLifecycle:
         body = json.loads(km_mod.DEFAULT_KEYMAP_FILE.read_text())
         assert body == {"keymap": {"action_keys": {}, "leader_commands": {}}}
 
-    def test_invalid_json_falls_back(self, tmp_path: Path):
-        path = tmp_path / "invalid.json"
-        path.write_text("not valid json", encoding="utf-8")
-        manager = KeymapManager(settings_store=MockSettingsStore({"custom_keymap": str(path)}))
+    def test_invalid_json_falls_back(self):
+        from sqlit.domains.shell.app import keymap_manager as km_mod
+        km_mod.DEFAULT_KEYMAP_FILE.parent.mkdir(parents=True, exist_ok=True)
+        km_mod.DEFAULT_KEYMAP_FILE.write_text("not valid json", encoding="utf-8")
+        manager = KeymapManager(settings_store=MockSettingsStore({}))
         manager.initialize()
-        assert manager.load_error and "Failed to load custom keymap" in manager.load_error
+        assert manager.load_error and "Failed to load" in manager.load_error
         assert not isinstance(get_keymap(), FileBasedKeymapProvider)
 
-    def test_missing_file_falls_back(self, tmp_path: Path):
-        manager = KeymapManager(
-            settings_store=MockSettingsStore({"custom_keymap": str(tmp_path / "nope.json")})
-        )
-        manager.initialize()
-        assert manager.load_error and "not found" in manager.load_error
-
-    def test_load_error_cleared_on_clean_reinit(self, tmp_path: Path):
-        path = tmp_path / "bad.json"
-        path.write_text("not valid json", encoding="utf-8")
-        manager = KeymapManager(settings_store=MockSettingsStore({"custom_keymap": str(path)}))
+    def test_load_error_cleared_on_clean_reinit(self):
+        from sqlit.domains.shell.app import keymap_manager as km_mod
+        km_mod.DEFAULT_KEYMAP_FILE.parent.mkdir(parents=True, exist_ok=True)
+        km_mod.DEFAULT_KEYMAP_FILE.write_text("not valid json", encoding="utf-8")
+        manager = KeymapManager(settings_store=MockSettingsStore({}))
         manager.initialize()
         assert manager.load_error is not None
-        # Re-running with the default sentinel must clear the prior error.
-        manager._settings_store = MockSettingsStore({"custom_keymap": "default"})  # type: ignore[attr-defined]
+        # Replace the bad file with a clean scaffold — next init must clear the error.
+        km_mod.DEFAULT_KEYMAP_FILE.write_text(
+            json.dumps({"keymap": {"action_keys": {}, "leader_commands": {}}}),
+            encoding="utf-8",
+        )
         manager.initialize()
         assert manager.load_error is None
 
@@ -227,23 +235,6 @@ class TestDefaultKeymapFile:
         manager.initialize()
         assert manager.load_error is None
         assert get_keymap().action("execute_query") == "ctrl+enter"
-
-    def test_settings_override_takes_precedence(self, tmp_path: Path, monkeypatch):
-        # If both default file and `custom_keymap` setting exist, the setting wins.
-        from sqlit.domains.shell.app import keymap_manager as km_mod
-        default_path = tmp_path / "keymap.json"
-        default_path.write_text(json.dumps(
-            {"keymap": {"action_keys": {"query_normal": {"execute_query": "ctrl+enter"}}}}
-        ))
-        monkeypatch.setattr(km_mod, "DEFAULT_KEYMAP_FILE", default_path)
-
-        named = tmp_path / "named.json"
-        named.write_text(json.dumps(
-            {"keymap": {"action_keys": {"query_normal": {"execute_query": "ctrl+shift+enter"}}}}
-        ))
-        manager = KeymapManager(settings_store=MockSettingsStore({"custom_keymap": str(named)}))
-        manager.initialize()
-        assert get_keymap().action("execute_query") == "ctrl+shift+enter"
 
     def test_no_setting_creates_scaffold_and_loads_it(self, tmp_path: Path, monkeypatch):
         from sqlit.domains.shell.app import keymap_manager as km_mod
@@ -457,16 +448,52 @@ class TestConflicts:
         )
         assert manager.load_error is None
 
+    def test_ancestor_shadow_is_caught(self, tmp_path: Path):
+        # Default: '?' → show_help in 'global'. Binding '?' in
+        # 'query_normal' to a different action shadows show_help at
+        # runtime (descendant context wins). Must be flagged so the user
+        # discovers it in the UI, not via the silent loss of '?' help in
+        # the query editor.
+        manager = _load(
+            tmp_path,
+            "shadow",
+            {"keymap": {"action_keys": {"query_normal": {"enter_insert_mode": "?"}}}},
+        )
+        assert manager.load_error is not None
+        assert "shadow" in manager.load_error.lower()
+        assert "question_mark" in manager.load_error
+        assert "query_normal" in manager.load_error
+        assert "global" in manager.load_error
+
+    def test_sibling_contexts_do_not_shadow(self, tmp_path: Path):
+        # 'tree' and 'query_normal' are sibling pane-focused contexts —
+        # only one is active at a time, so binding the same key to
+        # different actions across them is fine.
+        manager = _load(
+            tmp_path,
+            "siblings",
+            {
+                "keymap": {
+                    "action_keys": {
+                        # `ctrl+e` is unused in defaults across both states.
+                        "query_normal": {"cursor_word_end": "ctrl+e"},
+                    }
+                }
+            },
+        )
+        assert manager.load_error is None
+
 
 class TestStartupNotification:
     """The load error is surfaced to the user via app.notify on startup."""
 
-    def test_notifies_when_load_error_present(self, tmp_path: Path):
+    def test_notifies_when_load_error_present(self):
         from sqlit.domains.shell.app.startup_flow import _warn_on_keymap_error
+        from sqlit.domains.shell.app import keymap_manager as km_mod
 
-        path = tmp_path / "bad.json"
-        path.write_text("not valid json", encoding="utf-8")
-        manager = KeymapManager(settings_store=MockSettingsStore({"custom_keymap": str(path)}))
+        km_mod.DEFAULT_KEYMAP_FILE.parent.mkdir(parents=True, exist_ok=True)
+        km_mod.DEFAULT_KEYMAP_FILE.write_text("not valid json", encoding="utf-8")
+        manager = KeymapManager(settings_store=MockSettingsStore({}))
         manager.initialize()
         assert manager.load_error is not None
 
@@ -490,7 +517,7 @@ class TestStartupNotification:
         assert len(notifications) == 1
         severity, message = notifications[0]
         assert severity == "error"
-        assert "Failed to load custom keymap" in message
+        assert "Failed to load" in message
         assert "Defaults are in effect" in message
 
     def test_silent_when_no_load_error(self, tmp_path: Path):

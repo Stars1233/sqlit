@@ -10,6 +10,7 @@ class RootState(State):
     """Root state - minimal actions available everywhere."""
 
     help_category = "General"
+    keymap_context = "global"
 
     def _setup_actions(self) -> None:
         self.allows("quit", help="Quit")

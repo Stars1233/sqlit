@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any
 
 from textual.app import ComposeResult
-from rich.markup import escape
+from rich.text import Text
 from textual.binding import Binding
 from textual.containers import VerticalScroll
 from textual.screen import ModalScreen
@@ -112,17 +112,32 @@ class QueryHistoryScreen(ModalScreen):
         self._filtered_entries: list[QueryHistoryEntry] = []
 
     def _merge_entries(self) -> list[QueryHistoryEntry]:
-        """Merge history entries with starred-only queries."""
+        """Merge history entries with starred-only queries.
+
+        Same-text rows collapse to a single most-recent entry so the row
+        count matches the starring model (which is keyed by query text):
+        starring one row never marks two visually-identical rows. In
+        multi-connection (telescope) mode the dedupe key is
+        (connection_name, query); in single-connection mode it's just
+        the query.
+        """
         result: list[QueryHistoryEntry] = []
 
         if self._multi_connection:
-            history_queries_by_connection: dict[str, set[str]] = {}
+            seen: dict[tuple[str, str], QueryHistoryEntry] = {}
             for entry in self.history:
                 starred_queries = self._starred_by_connection.get(entry.connection_name, set())
                 entry.is_starred = entry.query.strip() in starred_queries
                 entry.is_starred_only = False
-                history_queries_by_connection.setdefault(entry.connection_name, set()).add(entry.query.strip())
-                result.append(entry)
+                key = (entry.connection_name, entry.query.strip())
+                existing = seen.get(key)
+                if existing is None or entry.timestamp > existing.timestamp:
+                    seen[key] = entry
+            result.extend(seen.values())
+
+            history_queries_by_connection: dict[str, set[str]] = {}
+            for (conn_name, query_text) in seen:
+                history_queries_by_connection.setdefault(conn_name, set()).add(query_text)
 
             for connection_name, starred_queries in self._starred_by_connection.items():
                 history_queries = history_queries_by_connection.get(connection_name, set())
@@ -137,15 +152,17 @@ class QueryHistoryScreen(ModalScreen):
                         )
                         result.append(entry)
         else:
-            # Mark history entries that are starred
-            history_queries: set[str] = set()
+            seen_single: dict[str, QueryHistoryEntry] = {}
             for entry in self.history:
                 entry.is_starred = entry.query.strip() in self.starred
                 entry.is_starred_only = False
-                history_queries.add(entry.query.strip())
-                result.append(entry)
+                key = entry.query.strip()
+                existing = seen_single.get(key)
+                if existing is None or entry.timestamp > existing.timestamp:
+                    seen_single[key] = entry
+            result.extend(seen_single.values())
 
-            # Add starred-only entries (queries that were starred but not in history)
+            history_queries = set(seen_single.keys())
             for starred_query in self.starred:
                 if starred_query not in history_queries:
                     entry = QueryHistoryEntry(
@@ -221,7 +238,7 @@ class QueryHistoryScreen(ModalScreen):
         entries = self._get_display_entries()
         if idx < len(entries):
             preview = self.query_one("#history-preview", Static)
-            preview.update(escape(entries[idx].query))
+            preview.update(Text(entries[idx].query))
 
     def action_select(self) -> None:
         entries = self._get_display_entries()
@@ -287,6 +304,17 @@ class QueryHistoryScreen(ModalScreen):
 
     def on_key(self, event: Any) -> None:
         if not self._filter_active:
+            if event.key in ("j", "k"):
+                try:
+                    option_list = self.query_one("#history-list", OptionList)
+                except Exception:
+                    return
+                if event.key == "j":
+                    option_list.action_cursor_down()
+                else:
+                    option_list.action_cursor_up()
+                event.prevent_default()
+                event.stop()
             return
 
         key = event.key
@@ -468,19 +496,25 @@ class QueryHistoryScreen(ModalScreen):
         return action, entry.query
 
     def _build_option(self, entry: QueryHistoryEntry) -> Option:
-        star = "[yellow]*[/] " if entry.is_starred else "  "
-        # Collapse all whitespace to single spaces and strip
+        # Build a Rich Text (not a markup string) so identifiers like
+        # [dbo].[ServiceFeatures] aren't eaten by the markup parser:
+        # rich.markup.escape only escapes "[a-z#/@…]" tags, so uppercase
+        # bracket identifiers slip through and get consumed as fake tags.
         query_single_line = re.sub(r"\s+", " ", entry.query).strip()
         max_len = 40 if self._multi_connection else 55
         if len(query_single_line) > max_len:
             query_preview = query_single_line[:max_len] + "..."
         else:
             query_preview = query_single_line
-        query_preview = escape(query_preview)
+
+        text = Text()
+        if entry.is_starred:
+            text.append("* ", style="yellow")
+        else:
+            text.append("  ")
         if self._multi_connection:
             conn_label = self._truncate_label(self._entry_connection_label(entry), 24)
-            conn_label = escape(conn_label)
-        option_id = self._entry_option_id(entry)
-        if self._multi_connection:
-            return Option(f"{star}[dim]{conn_label}[/]/{query_preview}", id=option_id)
-        return Option(f"{star}{query_preview}", id=option_id)
+            text.append(conn_label, style="dim")
+            text.append("/")
+        text.append(query_preview)
+        return Option(text, id=self._entry_option_id(entry))

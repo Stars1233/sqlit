@@ -11,6 +11,7 @@ class QueryNormalModeState(State):
     """Query editor in NORMAL mode."""
 
     help_category = "Query Editor (Normal)"
+    keymap_context = "query_normal"
 
     def _setup_actions(self) -> None:
         self.allows("enter_insert_mode", label="Insert Mode", help="Enter INSERT mode")

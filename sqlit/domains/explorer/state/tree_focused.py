@@ -10,6 +10,7 @@ class TreeFocusedState(State):
     """Base state when tree has focus."""
 
     help_category = "Explorer"
+    keymap_context = "tree"
 
     def _setup_actions(self) -> None:
         self.allows("new_connection", label="New", help="New connection")

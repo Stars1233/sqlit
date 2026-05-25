@@ -10,6 +10,7 @@ class ValueViewActiveState(State):
     """Base state for inline value view (viewing a cell's full content)."""
 
     help_category = "Value View"
+    keymap_context = "value_view"
 
     def _setup_actions(self) -> None:
         self.allows("close_value_view", key="escape", label="Close", help="Close value view")

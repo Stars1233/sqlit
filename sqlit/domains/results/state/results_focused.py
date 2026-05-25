@@ -10,6 +10,7 @@ class ResultsFocusedState(State):
     """Results table has focus."""
 
     help_category = "Results"
+    keymap_context = "results"
 
     def _setup_actions(self) -> None:
         def has_results(app: InputContext) -> bool:

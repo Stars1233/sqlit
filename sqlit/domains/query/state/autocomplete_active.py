@@ -11,6 +11,7 @@ class AutocompleteActiveState(State):
     """Query editor with autocomplete dropdown visible."""
 
     help_category = "Query Editor (Insert)"
+    keymap_context = "autocomplete"
 
     def _setup_actions(self) -> None:
         self.allows("autocomplete_next", help="Next suggestion", help_key="^j")

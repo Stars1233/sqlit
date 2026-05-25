@@ -294,3 +294,315 @@ class TestQueryHistorySavePolicy:
             option_list = screen.query_one("#history-list", OptionList)
             assert option_list.option_count == 1
             assert all(entry.connection_name == "saved-db" for entry in screen._merged_entries)
+
+
+class TestQueryHistoryStarringDuplicates:
+    """Regression tests for starring behavior when multiple history entries
+    share the same query text (e.g., same SQL run against multiple databases
+    on one connection — file-backed dedup is per-(connection, database))."""
+
+    def _make_screen(
+        self,
+        history: list[QueryHistoryEntry],
+        starred: set[str],
+        connection_name: str = "saved-db",
+    ) -> QueryHistoryScreen:
+        return QueryHistoryScreen(
+            history=history,
+            connection_name=connection_name,
+            starred=starred,
+        )
+
+    def test_same_query_across_databases_collapses_to_single_row(self) -> None:
+        history = [
+            QueryHistoryEntry(
+                query="SELECT 1",
+                timestamp="2026-01-02T00:00:00",
+                connection_name="saved-db",
+                database="db_a",
+            ),
+            QueryHistoryEntry(
+                query="SELECT 1",
+                timestamp="2026-01-01T00:00:00",
+                connection_name="saved-db",
+                database="db_b",
+            ),
+        ]
+        screen = self._make_screen(history, starred={"SELECT 1"})
+
+        merged = screen._merge_entries()
+
+        assert len(merged) == 1, (
+            "Same query text from two databases should collapse to one row "
+            "in the history display (starring is keyed by text, so the row "
+            "count must match)."
+        )
+        assert merged[0].is_starred
+        # Most-recent occurrence wins the row.
+        assert merged[0].database == "db_a"
+
+    @pytest.mark.asyncio
+    async def test_starring_one_marks_duplicate_in_other_database(self) -> None:
+        saved_conn = create_test_connection("saved-db", "sqlite")
+        entries = [
+            QueryHistoryEntry(
+                query="SELECT 1",
+                timestamp="2026-01-02T00:00:00",
+                connection_name="saved-db",
+                database="db_a",
+            ),
+            QueryHistoryEntry(
+                query="SELECT 1",
+                timestamp="2026-01-01T00:00:00",
+                connection_name="saved-db",
+                database="db_b",
+            ),
+        ]
+
+        class StubHistoryStore:
+            def __init__(self, entries):
+                self._entries = entries
+
+            def load_all(self):
+                return list(self._entries)
+
+            def load_for_connection(self, connection_name):
+                return [e for e in self._entries if e.connection_name == connection_name]
+
+            def delete_entry(self, connection_name, timestamp):
+                _ = connection_name
+                _ = timestamp
+                return False
+
+            def save_query(self, connection_name, query, database=""):
+                _ = connection_name
+                _ = query
+                _ = database
+
+        history_store = StubHistoryStore(entries)
+        services = build_test_services(
+            connection_store=MockConnectionStore([saved_conn]),
+            settings_store=MockSettingsStore({"theme": "tokyo-night"}),
+            history_store=history_store,
+        )
+        app = SSMSTUI(services=services)
+
+        async with app.run_test(size=(100, 35)) as pilot:
+            app.connections = [saved_conn]
+            app.current_config = saved_conn
+
+            # Open history, star the first row (which corresponds to db_a),
+            # close — emulates: user opens history, presses '*' on one row.
+            app.action_show_history()
+            await pilot.pause(0.2)
+            screen = next(
+                (s for s in app.screen_stack if isinstance(s, QueryHistoryScreen)),
+                None,
+            )
+            assert screen is not None
+            option_list = screen.query_one("#history-list", OptionList)
+            # The two same-text rows should already be collapsed to one.
+            assert option_list.option_count == 1
+            assert option_list.highlighted == 0
+            screen.action_toggle_star()
+            await pilot.pause(0.2)
+
+            # Re-open: exactly one starred row, not two.
+            app.action_show_history()
+            await pilot.pause(0.2)
+            screen = next(
+                (s for s in app.screen_stack if isinstance(s, QueryHistoryScreen)),
+                None,
+            )
+            assert screen is not None
+            starred_entries = [e for e in screen._merged_entries if e.is_starred]
+            try:
+                assert len(starred_entries) == 1, (
+                    f"Expected exactly one starred row after toggling one; "
+                    f"got {len(starred_entries)}"
+                )
+            finally:
+                # The shared test config dir is module-scoped (see
+                # tests/fixtures/utils.py), so any star we save here would
+                # leak to later tests. Clean up.
+                services.starred_store.clear_for_connection(saved_conn.name)
+
+
+class TestQueryHistoryBracketIdentifierRendering:
+    """Regression tests for MSSQL bracket identifiers like [dbo].[ServiceFeatures]
+    being silently eaten by Textual markup when the bracket contents start with
+    an uppercase letter (rich.markup.escape only escapes [a-z#/@] tags)."""
+
+    @pytest.mark.asyncio
+    async def test_bracket_identifier_with_uppercase_not_truncated(self) -> None:
+        from textual.app import App
+        from textual.widgets.option_list import Option
+
+        # Drive the option directly through a minimal Textual app so we
+        # observe what _build_option's text actually renders to.
+        screen = QueryHistoryScreen(
+            history=[
+                QueryHistoryEntry(
+                    query="SELECT TOP 100 * FROM [dbo].[ServiceFeatures]",
+                    timestamp="2026-01-01T00:00:00",
+                    connection_name="saved-db",
+                ),
+            ],
+            connection_name="saved-db",
+            starred=set(),
+        )
+        screen._merged_entries = screen._merge_entries()
+        built = screen._build_option(screen._merged_entries[0])
+
+        class _ProbeApp(App):
+            def compose(self):
+                yield OptionList(Option(built.prompt, id=built.id or "probe"), id="probe-list")
+
+        app = _ProbeApp()
+        async with app.run_test(size=(120, 10)) as pilot:
+            await pilot.pause()
+            option_list = app.query_one("#probe-list", OptionList)
+            lines = option_list.render_lines(option_list.region)
+            rendered_text = "\n".join(
+                "".join(seg.text for seg in line) for line in lines
+            )
+
+        assert "[ServiceFeatures]" in rendered_text, (
+            "Bracket identifier with uppercase first letter was silently "
+            "swallowed by Textual markup (rich.markup.escape only escapes "
+            "tags starting with [a-z#/@], so '[ServiceFeatures]' is left "
+            "unescaped and the markup parser eats it). Visible text:\n"
+            + rendered_text
+        )
+
+
+class TestQueryHistoryVimNavigation:
+    """Tests for j/k vim-style navigation in the history screen."""
+
+    @pytest.mark.asyncio
+    async def test_j_moves_cursor_down_and_k_moves_up(self) -> None:
+        saved_conn = create_test_connection("saved-db", "sqlite")
+        entries = [
+            QueryHistoryEntry(
+                query=f"select {i}",
+                timestamp=f"2026-01-0{i}T00:00:00",
+                connection_name="saved-db",
+            )
+            for i in range(1, 4)
+        ]
+
+        class StubHistoryStore:
+            def __init__(self, entries):
+                self._entries = entries
+
+            def load_all(self):
+                return list(self._entries)
+
+            def load_for_connection(self, connection_name):
+                return [e for e in self._entries if e.connection_name == connection_name]
+
+            def delete_entry(self, connection_name, timestamp):
+                _ = connection_name
+                _ = timestamp
+                return False
+
+            def save_query(self, connection_name, query):
+                _ = connection_name
+                _ = query
+
+        history_store = StubHistoryStore(entries)
+        services = build_test_services(
+            connection_store=MockConnectionStore([saved_conn]),
+            settings_store=MockSettingsStore({"theme": "tokyo-night"}),
+            history_store=history_store,
+        )
+        app = SSMSTUI(services=services)
+
+        async with app.run_test(size=(100, 35)) as pilot:
+            app.connections = [saved_conn]
+            app.current_config = saved_conn
+            app.action_show_history()
+            await pilot.pause(0.2)
+
+            screen = next(
+                (s for s in app.screen_stack if isinstance(s, QueryHistoryScreen)),
+                None,
+            )
+            assert screen is not None
+
+            option_list = screen.query_one("#history-list", OptionList)
+            assert option_list.option_count == 3
+            assert option_list.highlighted == 0
+
+            await pilot.press("j")
+            assert option_list.highlighted == 1
+
+            await pilot.press("j")
+            assert option_list.highlighted == 2
+
+            await pilot.press("k")
+            assert option_list.highlighted == 1
+
+    @pytest.mark.asyncio
+    async def test_j_and_k_typeable_when_filter_active(self) -> None:
+        saved_conn = create_test_connection("saved-db", "sqlite")
+        entries = [
+            QueryHistoryEntry(
+                query="select jk_marker",
+                timestamp="2026-01-01T00:00:00",
+                connection_name="saved-db",
+            ),
+            QueryHistoryEntry(
+                query="select other",
+                timestamp="2026-01-02T00:00:00",
+                connection_name="saved-db",
+            ),
+        ]
+
+        class StubHistoryStore:
+            def __init__(self, entries):
+                self._entries = entries
+
+            def load_all(self):
+                return list(self._entries)
+
+            def load_for_connection(self, connection_name):
+                return [e for e in self._entries if e.connection_name == connection_name]
+
+            def delete_entry(self, connection_name, timestamp):
+                _ = connection_name
+                _ = timestamp
+                return False
+
+            def save_query(self, connection_name, query):
+                _ = connection_name
+                _ = query
+
+        history_store = StubHistoryStore(entries)
+        services = build_test_services(
+            connection_store=MockConnectionStore([saved_conn]),
+            settings_store=MockSettingsStore({"theme": "tokyo-night"}),
+            history_store=history_store,
+        )
+        app = SSMSTUI(services=services)
+
+        async with app.run_test(size=(100, 35)) as pilot:
+            app.connections = [saved_conn]
+            app.current_config = saved_conn
+            app.action_show_history()
+            await pilot.pause(0.2)
+
+            screen = next(
+                (s for s in app.screen_stack if isinstance(s, QueryHistoryScreen)),
+                None,
+            )
+            assert screen is not None
+
+            await pilot.press("slash")
+            await pilot.pause()
+            assert screen._filter_active
+
+            await pilot.press("j")
+            await pilot.press("k")
+            await pilot.pause()
+            assert screen._filter_text == "jk"

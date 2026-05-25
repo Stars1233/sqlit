@@ -10,6 +10,7 @@ class TreeVisualModeState(State):
     """Tree focused in visual selection mode (vim-style range selection)."""
 
     help_category = "Explorer"
+    keymap_context = "tree_visual"
 
     def _setup_actions(self) -> None:
         self.allows(

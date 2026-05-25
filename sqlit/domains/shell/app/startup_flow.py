@@ -170,8 +170,8 @@ def _warn_on_keymap_error(app: AppProtocol, is_headless: bool) -> None:
     error = getattr(manager, "load_error", None) if manager else None
     if not error:
         return
-    from sqlit.domains.shell.app.keymap_manager import CUSTOM_KEYMAP_DIR
-    message = f"{error}\nDefaults are in effect — fix {CUSTOM_KEYMAP_DIR} and restart."
+    from sqlit.domains.shell.app.keymap_manager import DEFAULT_KEYMAP_FILE
+    message = f"{error}\nDefaults are in effect — fix {DEFAULT_KEYMAP_FILE} and restart."
     if is_headless:
         print(f"[sqlit] {message}", file=sys.stderr)
         return

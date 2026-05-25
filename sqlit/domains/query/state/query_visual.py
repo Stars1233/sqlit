@@ -11,6 +11,7 @@ class QueryVisualModeState(State):
     """Query editor in VISUAL mode (v)."""
 
     help_category = "Query Editor (Visual)"
+    keymap_context = "query_visual"
 
     def _setup_actions(self) -> None:
         self.allows(

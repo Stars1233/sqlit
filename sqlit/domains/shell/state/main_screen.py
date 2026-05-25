@@ -10,6 +10,7 @@ class MainScreenState(State):
     """Base state for main screen (no modal active)."""
 
     help_category = "Navigation"
+    keymap_context = "navigation"
 
     def _setup_actions(self) -> None:
         self.allows("focus_explorer", help="Focus Explorer")

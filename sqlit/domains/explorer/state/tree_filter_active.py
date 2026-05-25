@@ -10,6 +10,7 @@ class TreeFilterActiveState(BlockingState):
     """State when tree filter is active."""
 
     help_category = "Explorer"
+    keymap_context = "tree_filter"
 
     def _setup_actions(self) -> None:
         self.allows("tree_filter_close", help="Close filter")

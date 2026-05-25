@@ -10,6 +10,7 @@ class ResultsFilterActiveState(BlockingState):
     """State when results filter is active."""
 
     help_category = "Results"
+    keymap_context = "results_filter"
 
     def _setup_actions(self) -> None:
         self.allows("results_filter_close", help="Close filter", help_key="esc")
