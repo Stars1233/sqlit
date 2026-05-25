@@ -213,3 +213,35 @@ class TestEmptyExplorerFooter:
         left, _right = sm.get_display_bindings(ctx)
         actions = [b.action for b in left]
         assert "enter_tree_visual_mode" in actions
+
+
+class TestEditQueryInEditorLeaderCommand:
+    """The space+o leader command is unguarded so it never falls through
+    to vim `o = open_line_below` regardless of which pane has focus."""
+
+    def test_allowed_when_query_focused(self):
+        sm = UIStateMachine()
+        ctx = make_context(
+            focus="query",
+            leader_pending=True,
+            leader_menu="leader",
+        )
+        assert sm.check_action(ctx, "leader_edit_query_in_editor") is True
+
+    def test_allowed_when_explorer_focused(self):
+        sm = UIStateMachine()
+        ctx = make_context(
+            focus="explorer",
+            leader_pending=True,
+            leader_menu="leader",
+        )
+        assert sm.check_action(ctx, "leader_edit_query_in_editor") is True
+
+    def test_allowed_when_results_focused(self):
+        sm = UIStateMachine()
+        ctx = make_context(
+            focus="results",
+            leader_pending=True,
+            leader_menu="leader",
+        )
+        assert sm.check_action(ctx, "leader_edit_query_in_editor") is True
