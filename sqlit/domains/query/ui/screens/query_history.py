@@ -287,6 +287,17 @@ class QueryHistoryScreen(ModalScreen):
 
     def on_key(self, event: Any) -> None:
         if not self._filter_active:
+            if event.key in ("j", "k"):
+                try:
+                    option_list = self.query_one("#history-list", OptionList)
+                except Exception:
+                    return
+                if event.key == "j":
+                    option_list.action_cursor_down()
+                else:
+                    option_list.action_cursor_up()
+                event.prevent_default()
+                event.stop()
             return
 
         key = event.key

@@ -294,3 +294,135 @@ class TestQueryHistorySavePolicy:
             option_list = screen.query_one("#history-list", OptionList)
             assert option_list.option_count == 1
             assert all(entry.connection_name == "saved-db" for entry in screen._merged_entries)
+
+
+class TestQueryHistoryVimNavigation:
+    """Tests for j/k vim-style navigation in the history screen."""
+
+    @pytest.mark.asyncio
+    async def test_j_moves_cursor_down_and_k_moves_up(self) -> None:
+        saved_conn = create_test_connection("saved-db", "sqlite")
+        entries = [
+            QueryHistoryEntry(
+                query=f"select {i}",
+                timestamp=f"2026-01-0{i}T00:00:00",
+                connection_name="saved-db",
+            )
+            for i in range(1, 4)
+        ]
+
+        class StubHistoryStore:
+            def __init__(self, entries):
+                self._entries = entries
+
+            def load_all(self):
+                return list(self._entries)
+
+            def load_for_connection(self, connection_name):
+                return [e for e in self._entries if e.connection_name == connection_name]
+
+            def delete_entry(self, connection_name, timestamp):
+                _ = connection_name
+                _ = timestamp
+                return False
+
+            def save_query(self, connection_name, query):
+                _ = connection_name
+                _ = query
+
+        history_store = StubHistoryStore(entries)
+        services = build_test_services(
+            connection_store=MockConnectionStore([saved_conn]),
+            settings_store=MockSettingsStore({"theme": "tokyo-night"}),
+            history_store=history_store,
+        )
+        app = SSMSTUI(services=services)
+
+        async with app.run_test(size=(100, 35)) as pilot:
+            app.connections = [saved_conn]
+            app.current_config = saved_conn
+            app.action_show_history()
+            await pilot.pause(0.2)
+
+            screen = next(
+                (s for s in app.screen_stack if isinstance(s, QueryHistoryScreen)),
+                None,
+            )
+            assert screen is not None
+
+            option_list = screen.query_one("#history-list", OptionList)
+            assert option_list.option_count == 3
+            assert option_list.highlighted == 0
+
+            await pilot.press("j")
+            assert option_list.highlighted == 1
+
+            await pilot.press("j")
+            assert option_list.highlighted == 2
+
+            await pilot.press("k")
+            assert option_list.highlighted == 1
+
+    @pytest.mark.asyncio
+    async def test_j_and_k_typeable_when_filter_active(self) -> None:
+        saved_conn = create_test_connection("saved-db", "sqlite")
+        entries = [
+            QueryHistoryEntry(
+                query="select jk_marker",
+                timestamp="2026-01-01T00:00:00",
+                connection_name="saved-db",
+            ),
+            QueryHistoryEntry(
+                query="select other",
+                timestamp="2026-01-02T00:00:00",
+                connection_name="saved-db",
+            ),
+        ]
+
+        class StubHistoryStore:
+            def __init__(self, entries):
+                self._entries = entries
+
+            def load_all(self):
+                return list(self._entries)
+
+            def load_for_connection(self, connection_name):
+                return [e for e in self._entries if e.connection_name == connection_name]
+
+            def delete_entry(self, connection_name, timestamp):
+                _ = connection_name
+                _ = timestamp
+                return False
+
+            def save_query(self, connection_name, query):
+                _ = connection_name
+                _ = query
+
+        history_store = StubHistoryStore(entries)
+        services = build_test_services(
+            connection_store=MockConnectionStore([saved_conn]),
+            settings_store=MockSettingsStore({"theme": "tokyo-night"}),
+            history_store=history_store,
+        )
+        app = SSMSTUI(services=services)
+
+        async with app.run_test(size=(100, 35)) as pilot:
+            app.connections = [saved_conn]
+            app.current_config = saved_conn
+            app.action_show_history()
+            await pilot.pause(0.2)
+
+            screen = next(
+                (s for s in app.screen_stack if isinstance(s, QueryHistoryScreen)),
+                None,
+            )
+            assert screen is not None
+
+            await pilot.press("slash")
+            await pilot.pause()
+            assert screen._filter_active
+
+            await pilot.press("j")
+            await pilot.press("k")
+            await pilot.pause()
+            assert screen._filter_text == "jk"
