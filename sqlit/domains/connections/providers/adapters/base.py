@@ -430,7 +430,7 @@ class DatabaseAdapter(ABC):
         parts: list[str] = []
         if database and self.supports_cross_database_queries:
             parts.append(self.quote_identifier(database))
-        if schema and schema != self.default_schema:
+        if schema and (schema != self.default_schema or parts):
             parts.append(self.quote_identifier(schema))
         parts.append(self.quote_identifier(name))
         return ".".join(parts)
